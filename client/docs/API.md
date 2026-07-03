@@ -2,11 +2,11 @@
 
 > Generated from `internal/apispec` by `cmd/apidocgen`. Do not edit by hand.
 
-**Client version:** `1.9.0` &nbsp;&nbsp; **Versioned prefix:** `/v1.9`
+**Client version:** `1.10.0` &nbsp;&nbsp; **Versioned prefix:** `/v1.10`
 
 The Client is a local HTTP server (default port **62485**) that bridges BlenderKit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the BlenderKit web service.
 
-Most endpoints are registered twice: once under the bare path (e.g. `/report`) and once under the versioned prefix (e.g. `/v1.9/report`). Both are equivalent.
+Most endpoints are registered twice: once under the bare path (e.g. `/report`) and once under the versioned prefix (e.g. `/v1.10/report`). Both are equivalent.
 
 A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this file. Import it into Postman/Insomnia, render it with Swagger UI/Redoc, or generate client SDKs from it.
 
@@ -116,7 +116,7 @@ Returns a small HTML page with the Client PID, version, platform, system ID and 
 Primary polling endpoint for Blender add-ons. Subscribes the add-on on first call, refreshes the inactivity timer and returns the list of pending/finished/error tasks for the calling app. Rejects add-ons that do not send addon_version.
 
 - **Handler:** `reportHandler`
-- **Versioned alias:** `/v1.9/report`
+- **Versioned alias:** `/v1.10/report`
 - **Request body:** JSON `GetReportData` (Go struct in package main)
 
 #### `GET / POST /shutdown`
@@ -124,14 +124,14 @@ Primary polling endpoint for Blender add-ons. Subscribes the add-on on first cal
 Schedules a graceful exit of the Client process shortly after responding 200 OK.
 
 - **Handler:** `shutdownHandler`
-- **Versioned alias:** `/v1.9/shutdown`
+- **Versioned alias:** `/v1.10/shutdown`
 
 #### `GET /debug`
 
 Returns diagnostic information about the Client's network configuration, useful for troubleshooting connectivity and proxy issues.
 
 - **Handler:** `DebugNetworkHandler`
-- **Versioned alias:** `/v1.9/debug`
+- **Versioned alias:** `/v1.10/debug`
 
 ### login
 
@@ -147,7 +147,7 @@ Browser redirect target after the user logs in on blenderkit.com. Validates the 
 Refreshes the access token using a refresh token. On success a 'login' task is delivered to every connected app; on failure the apps are logged out.
 
 - **Handler:** `RefreshTokenHandler`
-- **Versioned alias:** `/v1.9/refresh_token`
+- **Versioned alias:** `/v1.10/refresh_token`
 - **Request body:** JSON `RefreshTokenData` (Go struct in package main)
 
 #### `POST /oauth2/verification_data`
@@ -155,7 +155,7 @@ Refreshes the access token using a refresh token. On success a 'login' task is d
 Stores the add-on's PKCE code_verifier and state so the later /consumer/exchange/ redirect can be verified.
 
 - **Handler:** `OAuth2VerificationDataHandler`
-- **Versioned alias:** `/v1.9/oauth2/verification_data`
+- **Versioned alias:** `/v1.10/oauth2/verification_data`
 - **Request body:** JSON `OAuth2VerificationData` (Go struct in package main)
 
 #### `POST /oauth2/logout`
@@ -163,7 +163,7 @@ Stores the add-on's PKCE code_verifier and state so the later /consumer/exchange
 Revokes the API key and refresh token on the server and logs the user out of all connected apps.
 
 - **Handler:** `OAuth2LogoutHandler`
-- **Versioned alias:** `/v1.9/oauth2/logout`
+- **Versioned alias:** `/v1.10/oauth2/logout`
 - **Request body:** JSON `RefreshTokenData` (Go struct in package main)
 - **Auth:** requires a logged-in BlenderKit API key
 
@@ -174,7 +174,7 @@ Revokes the API key and refresh token on the server and logs the user out of all
 Cancels all running tasks for the app and removes it from the Client's task registry.
 
 - **Handler:** `blenderUnsubscribeAddonHandler`
-- **Versioned alias:** `/v1.9/blender/unsubscribe_addon`
+- **Versioned alias:** `/v1.10/blender/unsubscribe_addon`
 - **Request body:** JSON `ReportData` (Go struct in package main)
 
 #### `POST /blender/cancel_download`
@@ -182,7 +182,7 @@ Cancels all running tasks for the app and removes it from the Client's task regi
 Cancels an in-progress asset download task.
 
 - **Handler:** `CancelDownloadHandler`
-- **Versioned alias:** `/v1.9/blender/cancel_download`
+- **Versioned alias:** `/v1.10/blender/cancel_download`
 - **Request body:** JSON `CancelDownloadData` (Go struct in package main)
 
 #### `POST /blender/asset_download`
@@ -190,7 +190,7 @@ Cancels an in-progress asset download task.
 Starts an asynchronous asset download. Progress and result are reported back through /report tasks.
 
 - **Handler:** `assetDownloadHandler`
-- **Versioned alias:** `/v1.9/blender/asset_download`
+- **Versioned alias:** `/v1.10/blender/asset_download`
 - **Request body:** JSON `DownloadData` (Go struct in package main)
 
 #### `POST /blender/asset_prxc_download`
@@ -198,7 +198,7 @@ Starts an asynchronous asset download. Progress and result are reported back thr
 Starts an asynchronous download of a proxy collection (prxc) asset.
 
 - **Handler:** `assetPrxcDownloadHandler`
-- **Versioned alias:** `/v1.9/blender/asset_prxc_download`
+- **Versioned alias:** `/v1.10/blender/asset_prxc_download`
 - **Request body:** JSON `DownloadPrxcData` (Go struct in package main)
 - **Request notes:** Body embeds DownloadPrxcData plus an app_id field.
 
@@ -207,7 +207,7 @@ Starts an asynchronous download of a proxy collection (prxc) asset.
 Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.
 
 - **Handler:** `assetSearchHandler`
-- **Versioned alias:** `/v1.9/blender/asset_search`
+- **Versioned alias:** `/v1.10/blender/asset_search`
 - **Request body:** JSON `SearchTaskData` (Go struct in package main)
 
 #### `POST /blender/asset_upload`
@@ -215,7 +215,7 @@ Starts an asynchronous asset search. Results, including thumbnail downloads, are
 Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.
 
 - **Handler:** `assetUploadHandler`
-- **Versioned alias:** `/v1.9/blender/asset_upload`
+- **Versioned alias:** `/v1.10/blender/asset_upload`
 - **Request body:** JSON `AssetUploadRequestData` (Go struct in package main)
 - **Auth:** requires a logged-in BlenderKit API key
 
@@ -226,7 +226,7 @@ Starts an asynchronous asset upload. Progress and result are reported back throu
 Runs a Python recipe under headless Blender. Used by external embedders (e.g. the Rhino plug-in) and available for the add-on's own background-script needs.
 
 - **Handler:** `runBlenderScriptHandler`
-- **Versioned alias:** `/v1.9/run_blender_script`
+- **Versioned alias:** `/v1.10/run_blender_script`
 - **Request body:** JSON `RunBlenderScriptData` (Go struct in package main)
 
 ### profiles
@@ -236,7 +236,7 @@ Runs a Python recipe under headless Blender. Used by external embedders (e.g. th
 Downloads a user's gravatar/avatar image into the Client temp directory.
 
 - **Handler:** `DownloadGravatarImageHandler`
-- **Versioned alias:** `/v1.9/profiles/download_gravatar_image`
+- **Versioned alias:** `/v1.10/profiles/download_gravatar_image`
 - **Request body:** JSON `FetchGravatarData` (Go struct in package main)
 
 #### `POST /profiles/get_user_profile`
@@ -244,7 +244,7 @@ Downloads a user's gravatar/avatar image into the Client temp directory.
 Fetches the logged-in user's BlenderKit profile.
 
 - **Handler:** `GetUserProfileHandler`
-- **Versioned alias:** `/v1.9/profiles/get_user_profile`
+- **Versioned alias:** `/v1.10/profiles/get_user_profile`
 - **Request body:** JSON `MinimalTaskData` (Go struct in package main)
 - **Auth:** requires a logged-in BlenderKit API key
 
@@ -255,7 +255,7 @@ Fetches the logged-in user's BlenderKit profile.
 Fetches comments for an asset.
 
 - **Handler:** `GetCommentsHandler`
-- **Versioned alias:** `/v1.9/comments/get_comments`
+- **Versioned alias:** `/v1.10/comments/get_comments`
 - **Request body:** JSON `GetCommentsData` (Go struct in package main)
 
 #### `POST /comments/create_comment`
@@ -263,7 +263,7 @@ Fetches comments for an asset.
 Posts a new comment (or reply) on an asset.
 
 - **Handler:** `CreateCommentHandler`
-- **Versioned alias:** `/v1.9/comments/create_comment`
+- **Versioned alias:** `/v1.10/comments/create_comment`
 - **Request body:** JSON `CreateCommentData` (Go struct in package main)
 - **Auth:** requires a logged-in BlenderKit API key
 
@@ -272,7 +272,7 @@ Posts a new comment (or reply) on an asset.
 Sends feedback (like or dislike) on a comment.
 
 - **Handler:** `FeedbackCommentHandler`
-- **Versioned alias:** `/v1.9/comments/feedback_comment`
+- **Versioned alias:** `/v1.10/comments/feedback_comment`
 - **Request body:** JSON `FeedbackCommentTaskData` (Go struct in package main)
 - **Auth:** requires a logged-in BlenderKit API key
 
@@ -281,7 +281,7 @@ Sends feedback (like or dislike) on a comment.
 Marks a comment as private or public.
 
 - **Handler:** `MarkCommentPrivateHandler`
-- **Versioned alias:** `/v1.9/comments/mark_comment_private`
+- **Versioned alias:** `/v1.10/comments/mark_comment_private`
 - **Request body:** JSON `MarkCommentPrivateTaskData` (Go struct in package main)
 - **Auth:** requires a logged-in BlenderKit API key
 
@@ -292,7 +292,7 @@ Marks a comment as private or public.
 Marks a server notification as read.
 
 - **Handler:** `MarkNotificationReadHandler`
-- **Versioned alias:** `/v1.9/notifications/mark_notification_read`
+- **Versioned alias:** `/v1.10/notifications/mark_notification_read`
 - **Request body:** JSON `MarkNotificationReadTaskData` (Go struct in package main)
 - **Auth:** requires a logged-in BlenderKit API key
 
@@ -303,7 +303,7 @@ Marks a server notification as read.
 Fetches the user's bookmarked assets.
 
 - **Handler:** `GetBookmarksHandler`
-- **Versioned alias:** `/v1.9/ratings/get_bookmarks`
+- **Versioned alias:** `/v1.10/ratings/get_bookmarks`
 - **Request body:** JSON `MinimalTaskData` (Go struct in package main)
 - **Auth:** requires a logged-in BlenderKit API key
 
@@ -312,7 +312,7 @@ Fetches the user's bookmarked assets.
 Fetches the user's ratings for an asset.
 
 - **Handler:** `GetRatingHandler`
-- **Versioned alias:** `/v1.9/ratings/get_rating`
+- **Versioned alias:** `/v1.10/ratings/get_rating`
 - **Request body:** JSON `GetRatingData` (Go struct in package main)
 - **Auth:** requires a logged-in BlenderKit API key
 
@@ -321,7 +321,7 @@ Fetches the user's ratings for an asset.
 Submits a rating for an asset. Only POST is accepted.
 
 - **Handler:** `SendRatingHandler`
-- **Versioned alias:** `/v1.9/ratings/send_rating`
+- **Versioned alias:** `/v1.10/ratings/send_rating`
 - **Request body:** JSON `SendRatingData` (Go struct in package main)
 - **Auth:** requires a logged-in BlenderKit API key
 
@@ -332,7 +332,7 @@ Submits a rating for an asset. Only POST is accepted.
 Blocking helper that resolves the direct download URL and filename for an asset file.
 
 - **Handler:** `GetDownloadURLWrapper`
-- **Versioned alias:** `/v1.9/wrappers/get_download_url`
+- **Versioned alias:** `/v1.10/wrappers/get_download_url`
 - **Request body:** JSON `DownloadData` (Go struct in package main)
 
 #### `POST /wrappers/complete_upload_file_blocking`
@@ -340,7 +340,7 @@ Blocking helper that resolves the direct download URL and filename for an asset 
 Blocking helper that completes a multi-part file upload.
 
 - **Handler:** `CompleteUploadFileBlocking`
-- **Versioned alias:** `/v1.9/wrappers/complete_upload_file_blocking`
+- **Versioned alias:** `/v1.10/wrappers/complete_upload_file_blocking`
 - **Request body:** JSON `CompleteUploadFileBlockingData` (Go struct in package main)
 - **Auth:** requires a logged-in BlenderKit API key
 
@@ -349,7 +349,7 @@ Blocking helper that completes a multi-part file upload.
 Blocking helper that downloads a file and returns once finished.
 
 - **Handler:** `BlockingFileDownloadHandler`
-- **Versioned alias:** `/v1.9/wrappers/blocking_file_download`
+- **Versioned alias:** `/v1.10/wrappers/blocking_file_download`
 - **Request body:** JSON `BlockingFileDownloadTaskData` (Go struct in package main)
 
 #### `POST /wrappers/blocking_request`
@@ -357,7 +357,7 @@ Blocking helper that downloads a file and returns once finished.
 Blocking helper that performs an arbitrary HTTP request to the BlenderKit server through the Client's configured HTTP client and returns the response.
 
 - **Handler:** `BlockingRequestHandler`
-- **Versioned alias:** `/v1.9/wrappers/blocking_request`
+- **Versioned alias:** `/v1.10/wrappers/blocking_request`
 - **Request body:** JSON `BlockingRequestData` (Go struct in package main)
 
 #### `POST /wrappers/nonblocking_request`
@@ -365,7 +365,7 @@ Blocking helper that performs an arbitrary HTTP request to the BlenderKit server
 Schedules an arbitrary HTTP request to the BlenderKit server; the response is reported back through /report tasks.
 
 - **Handler:** `NonblockingRequestHandler`
-- **Versioned alias:** `/v1.9/wrappers/nonblocking_request`
+- **Versioned alias:** `/v1.10/wrappers/nonblocking_request`
 - **Request body:** JSON `NonblockingRequestTaskData` (Go struct in package main)
 
 ### bkclientjs
@@ -375,14 +375,14 @@ Schedules an arbitrary HTTP request to the BlenderKit server; the response is re
 CORS-enabled endpoint used by bkclient.js in the web browser to read the Client version and the list of connected softwares. Supports OPTIONS preflight.
 
 - **Handler:** `bkclientjsStatusHandler`
-- **Versioned alias:** `/v1.9/bkclientjs/status`
+- **Versioned alias:** `/v1.10/bkclientjs/status`
 
 #### `POST / OPTIONS /bkclientjs/get_asset`
 
 CORS-enabled endpoint used by bkclient.js to ask a connected software to download an asset. Supports OPTIONS preflight.
 
 - **Handler:** `bkclientjsGetAssetHandler`
-- **Versioned alias:** `/v1.9/bkclientjs/get_asset`
+- **Versioned alias:** `/v1.10/bkclientjs/get_asset`
 - **Request body:** JSON `bkclientjsDownloadData` (Go struct in package main)
 
 ### godot
@@ -392,7 +392,7 @@ CORS-enabled endpoint used by bkclient.js to ask a connected software to downloa
 Polling endpoint for the Godot add-on. Subscribes the app on first call and returns a SoftwareResponse with the Client version, a connection message and pending tasks.
 
 - **Handler:** `godotReportHandler`
-- **Versioned alias:** `/v1.9/godot/report`
+- **Versioned alias:** `/v1.10/godot/report`
 - **Request body:** JSON `Software` (Go struct in package main)
 
 #### `POST /godot/unsubscribe_addon`
@@ -400,6 +400,6 @@ Polling endpoint for the Godot add-on. Subscribes the app on first call and retu
 Cancels all running tasks for the Godot app and removes it from the Client's task registry.
 
 - **Handler:** `godotUnsubscribeAddonHandler`
-- **Versioned alias:** `/v1.9/godot/unsubscribe_addon`
+- **Versioned alias:** `/v1.10/godot/unsubscribe_addon`
 - **Request body:** JSON `ReportData` (Go struct in package main)
 

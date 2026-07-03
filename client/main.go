@@ -49,9 +49,9 @@ const (
 	OAUTH_CLIENT_ID = "IdFRwa3SGA8eMpzhRVFMg5Ts8sPK93xBjif93x0F"
 
 	// PATHS
-	server_default   = "https://www.blenderkit.com" // default address to production blenderkit server
-	gravatar_dirname = "bkit_g"                     // directory in safeTempDir() for gravatar images
-	cleanfile_path   = "blendfiles/cleaned.blend"   // relative path to clean blend file in add-on directory
+	server_default   = "https://www.blendkit.com" // default address to production Blendkit server
+	gravatar_dirname = "bkit_g"                   // directory in safeTempDir() for gravatar images
+	cleanfile_path   = "blendfiles/cleaned.blend" // relative path to clean blend file in add-on directory
 
 	// EMOJIS
 	EmoOK            = "✅"
@@ -84,10 +84,10 @@ const (
 )
 
 var (
-	ClientVersion        = "0.0.0" // Version of this BlenderKit-client binary, set from file client/VERSION with -ldflags during build in dev.py
+	ClientVersion        = "0.0.0" // Version of this Blendkit-client binary, set from file client/VERSION with -ldflags during build in dev.py
 	SystemID             *string   // Unique ID of the current system (string of 15 integers)
 	Port                 *string   // Port on which Client should listen for HTTP requests
-	Server               *string   // Address of BlenderKit server to which Client should connect
+	Server               *string   // Address of Blendkit server to which Client should connect
 	StartingAddonVersion *string   // Version of the add-on which has started the Client
 	StartingSoftwareName *string   // Name of the software whose add-on has started the Client
 	StartingPID          *string   // Process ID of the software whose add-on has started the Client
@@ -128,7 +128,7 @@ func init() {
 	TaskCancelCh = make(chan *TaskCancel, 1000)
 	TaskErrorCh = make(chan *TaskError, 1000)
 
-	BKLog = log.New(os.Stdout, "⬡  ", log.LstdFlags)   // Hexagon like BlenderKit logo
+	BKLog = log.New(os.Stdout, "⬡  ", log.LstdFlags)   // Hexagon like Blendkit logo
 	ChanLog = log.New(os.Stdout, "<- ", log.LstdFlags) // Same symbols as channel in Go
 }
 
@@ -162,6 +162,7 @@ func handleChannels() {
 			TasksMux.Lock()
 			task := Tasks[u.AppID][u.TaskID]
 			if task == nil {
+				TasksMux.Unlock()
 				ChanLog.Printf("%s TaskProgressUpdateCh: task[%d][%s] is nil", EmoWarning, u.AppID, u.TaskID)
 				continue
 			}
@@ -179,6 +180,7 @@ func handleChannels() {
 			TasksMux.Lock()
 			task := Tasks[m.AppID][m.TaskID]
 			if task == nil {
+				TasksMux.Unlock()
 				ChanLog.Printf("%s TaskMessageCh: task[%d][%s] is nil", EmoWarning, m.AppID, m.TaskID)
 				continue
 			}
@@ -194,6 +196,7 @@ func handleChannels() {
 			TasksMux.Lock()
 			task := Tasks[f.AppID][f.TaskID]
 			if task == nil {
+				TasksMux.Unlock()
 				ChanLog.Printf("%s TaskFinishCh: task[%d][%s] is nil", EmoWarning, f.AppID, f.TaskID)
 				continue
 			}
@@ -212,6 +215,7 @@ func handleChannels() {
 			TasksMux.Lock()
 			task := Tasks[e.AppID][e.TaskID]
 			if task == nil {
+				TasksMux.Unlock()
 				ChanLog.Printf("%s TaskErrorCh: task[%d][%s] is nil", EmoWarning, e.AppID, e.TaskID)
 				continue
 			}
@@ -241,6 +245,7 @@ func handleChannels() {
 			TasksMux.Lock()
 			task := Tasks[c.AppID][c.TaskID]
 			if task == nil {
+				TasksMux.Unlock()
 				ChanLog.Printf("%s TaskCancelCh: task[%d][%s] is nil", EmoWarning, c.AppID, c.TaskID)
 				continue
 			}
@@ -289,7 +294,7 @@ func main() {
 	}
 
 	fmt.Print("\n\n")
-	startMessage := fmt.Sprintf("BlenderKit-Client v%s ", ClientVersion)
+	startMessage := fmt.Sprintf("Blendkit-Client v%s ", ClientVersion)
 	if *StartingAddonVersion == "" { // manual start - we could also check StartingSoftwareName
 		startMessage += "started manually"
 	} else { // proper start from Blender or other add-on
@@ -586,7 +591,7 @@ func reportHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("BlenderKit-Client-Version", ClientVersion)
+	w.Header().Set("Blendkit-Client-Version", ClientVersion)
 	w.WriteHeader(http.StatusOK)
 	w.Write(responseJSON)
 }
@@ -595,6 +600,7 @@ func reportHandler(w http.ResponseWriter, r *http.Request) {
 // This is called when new AppID appears - meaning new add-on or other app wants to communicate with Client.
 func SubscribeNewApp(data MinimalTaskData) {
 	Tasks[data.AppID] = make(map[string]*Task) // No TasksMux.Lock() as we expect the calling function to do it.
+	go CheckHealth(data)
 	go FetchDisclaimer(data)
 	go FetchCategories(data)
 	if data.APIKey != "" {
@@ -608,6 +614,33 @@ func (t *Task) Finish(message string) {
 	t.Status = "finished"
 	t.Message = message
 }
+
+// EnqueueConnectionErrorMessage sends a GUI-visible message task to the add-on.
+// This is used for startup connectivity failures where regular task errors can be
+// easy to miss in the UI flow.
+func EnqueueConnectionErrorMessage(appID int, summary, details string) {
+	if appID == 0 {
+		return
+	}
+	if details == "" {
+		details = summary
+	}
+	AddTaskCh <- &Task{
+		AppID:           appID,
+		TaskID:          uuid.New().String(),
+		TaskType:        "message_from_client",
+		Message:         summary,
+		MessageDetailed: details,
+		Status:          "finished",
+		Result: map[string]interface{}{
+			"level":       "ERROR",
+			"duration":    30,
+			"destination": "GUI",
+		},
+		Data: map[string]interface{}{},
+	}
+}
+
 func NewTask(data interface{}, appID int, taskID, taskType string) *Task {
 	if data == nil { // so it is not returned as None, but as empty dict{}
 		data = make(map[string]interface{})
@@ -718,63 +751,134 @@ func assetSearchHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // searchRetryMaxAttempts is the total number of attempts (including the first)
-// for search requests that receive HTTP 429 (Too Many Requests).
-const searchRetryMaxAttempts = 3
-const searchRetryDelay = 5 * time.Second
+// performed by doAssetSearch when the server replies with HTTP 429
+// (Too Many Requests). The backend currently caps anonymous traffic at
+// 100 requests/minute and Cloudflare may additionally answer with error
+// code 1015 — both are recoverable with a short backoff.
+const searchRetryMaxAttempts = 4
 
-// fetchSearchWithRetry performs the search HTTP GET, retrying up to
-// searchRetryMaxAttempts times when the server replies with HTTP 429.
-// On success the caller owns resp.Body and must close it. On failure resp
-// is nil and err describes the cause (transport error, request build error,
-// or "rate limited after N attempts").
-func fetchSearchWithRetry(data SearchTaskData) (*http.Response, error) {
-	var lastBody, lastStatus string
-	for attempt := 1; attempt <= searchRetryMaxAttempts; attempt++ {
-		req, err := http.NewRequest("GET", data.URLQuery, nil)
-		if err != nil {
-			return nil, fmt.Errorf("creating request: %w", err)
-		}
-		req.Header = getHeaders(data.APIKey, *SystemID, data.AddonVersion, data.PlatformVersion)
+// searchRetryBaseDelay is the starting delay for the exponential backoff
+// used by doAssetSearch when retrying on HTTP 429. Subsequent delays double
+// up to searchRetryMaxDelay. If the response carries a Retry-After header it
+// is respected instead (capped to searchRetryMaxDelay).
+const searchRetryBaseDelay = 2 * time.Second
+const searchRetryMaxDelay = 30 * time.Second
 
-		resp, err := ClientAPI.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		if resp.StatusCode != http.StatusTooManyRequests {
-			return resp, nil
-		}
+// searchThrottleMu protects searchThrottleUntil and is used to publish a
+// short global cooldown after a search hits HTTP 429, so subsequent search
+// requests preemptively wait instead of piling onto the rate limit again.
+var (
+	searchThrottleMu    sync.Mutex
+	searchThrottleUntil time.Time
+)
 
-		// HTTP 429 - remember body for the final error message, then back off.
-		_, lastBody, _ = ParseFailedHTTPResponse(resp)
-		lastStatus = resp.Status
-		resp.Body.Close()
-
-		if attempt == searchRetryMaxAttempts {
-			break
-		}
-		BKLog.Printf("%v search: HTTP 429, retrying in %v (attempt %d/%d), query: %v",
-			EmoWarning, searchRetryDelay, attempt, searchRetryMaxAttempts, data.URLQuery)
-		time.Sleep(searchRetryDelay)
+// waitForSearchThrottle blocks until any active global search throttle has
+// expired. Cheap no-op when no throttle is active.
+func waitForSearchThrottle() {
+	searchThrottleMu.Lock()
+	until := searchThrottleUntil
+	searchThrottleMu.Unlock()
+	if d := time.Until(until); d > 0 {
+		time.Sleep(d)
 	}
-	return nil, fmt.Errorf("rate-limited after %d attempts: %s, status (%s)",
-		searchRetryMaxAttempts, lastBody, lastStatus)
+}
+
+// setSearchThrottle extends the global search throttle so it expires no
+// sooner than now+d. Shorter pending throttles are upgraded; longer ones
+// are kept untouched.
+func setSearchThrottle(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	deadline := time.Now().Add(d)
+	searchThrottleMu.Lock()
+	if deadline.After(searchThrottleUntil) {
+		searchThrottleUntil = deadline
+	}
+	searchThrottleMu.Unlock()
+}
+
+// parseRetryAfter returns the duration advertised by the Retry-After header,
+// supporting both the "delta-seconds" and the HTTP-date formats. Returns 0
+// if the header is missing or cannot be parsed.
+func parseRetryAfter(h string) time.Duration {
+	if h == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(strings.TrimSpace(h)); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(h); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 func doAssetSearch(data SearchTaskData, taskUUID string) {
 	AddTaskCh <- NewTask(data, data.AppID, taskUUID, "search")
 
-	resp, err := fetchSearchWithRetry(data)
-	if err != nil {
-		// Transport-level error from ClientAPI.Do (timeouts, DNS, TLS, ...)
-		// arrives as *url.Error; strip the verbose "Get <url>:" prefix so the
-		// message fits inside user screenshots, same as before.
-		var urlErr *url.Error
-		if errors.As(err, &urlErr) {
-			shortened := fmt.Errorf("search GET: %w", errors.Unwrap(err))
-			TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: shortened, MessageDetailed: err.Error()}
+	// Honor any active global cooldown from a previous 429 before firing.
+	waitForSearchThrottle()
+
+	var (
+		resp           *http.Response
+		err            error
+		lastRespString string
+		lastStatus     string
+	)
+
+	for attempt := 0; attempt < searchRetryMaxAttempts; attempt++ {
+		req, reqErr := http.NewRequest("GET", data.URLQuery, nil)
+		if reqErr != nil {
+			err = fmt.Errorf("search - creating request: %w", reqErr)
+			TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
 			return
 		}
-		err = fmt.Errorf("search: %w, query: %v", err, data.URLQuery)
+		req.Header = getHeaders(data.APIKey, *SystemID, data.AddonVersion, data.PlatformVersion)
+
+		resp, err = ClientAPI.Do(req)
+		if err != nil {
+			// err has the interesting stuff at the end... err = Get "https://www.blendkit.com/api/v1/search/?query=dog+asset_type:model+sexualizedContent:False+order:_score&dict_parameters=1&page_size=15&addon_version=3.15.0&blender_version=4.4.0": read tcp 192.168.4.36:61092->104.26.5.20:443: read: operation timed out
+			shortened_err := errors.Unwrap(err)                         // Get rid off the url.Error part - Get "https://blendkit.com/api/v1/search/....."
+			shortened_err = fmt.Errorf("search GET: %w", shortened_err) //squeezes into user's screenshots
+			TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: shortened_err, MessageDetailed: err.Error()}
+			return
+		}
+
+		if resp.StatusCode != http.StatusTooManyRequests {
+			break
+		}
+
+		// HTTP 429 - parse body for logging, then back off and retry.
+		_, lastRespString, _ = ParseFailedHTTPResponse(resp)
+		lastStatus = resp.Status
+		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+		resp.Body.Close()
+		resp = nil
+
+		if attempt == searchRetryMaxAttempts-1 {
+			break // no more retries left
+		}
+
+		delay := retryAfter
+		if delay <= 0 {
+			delay = searchRetryBaseDelay * (1 << attempt) // 2s, 4s, 8s, ...
+		}
+		if delay > searchRetryMaxDelay {
+			delay = searchRetryMaxDelay
+		}
+		// Publish to the global throttle so concurrently arriving search
+		// requests preemptively back off instead of stacking more 429s.
+		setSearchThrottle(delay)
+		BKLog.Printf("%v search: HTTP 429 received, retrying in %v (attempt %d/%d), query: %v",
+			EmoWarning, delay, attempt+1, searchRetryMaxAttempts, data.URLQuery)
+		time.Sleep(delay)
+	}
+
+	if resp == nil {
+		err := fmt.Errorf("search: %s, status (%s), query: %v", lastRespString, lastStatus, data.URLQuery)
 		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
 		return
 	}
@@ -931,10 +1035,20 @@ func downloadImageBatch(tasks []*Task, block bool) {
 	if len(tasks) == 0 {
 		return
 	}
+	// Cap concurrent thumbnail HTTP requests so a single search page (15
+	// assets x 4 thumbnail variants = up to ~60 GETs) does not fan out into
+	// the per-IP rate-limit window in one burst. Smooth scrolling still
+	// preloads the next page worth of thumbs — just paced.
+	const maxConcurrentThumbs = 6
+	sem := make(chan struct{}, maxConcurrentThumbs)
 	wg := new(sync.WaitGroup)
 	for _, task := range tasks {
 		wg.Add(1)
-		go DownloadThumbnail(task, wg)
+		sem <- struct{}{} // acquire slot (blocks once we hit maxConcurrentThumbs in flight)
+		go func(t *Task) {
+			defer func() { <-sem }()
+			DownloadThumbnail(t, wg)
+		}(task)
 	}
 	if block {
 		wg.Wait()
@@ -1152,8 +1266,39 @@ func DownloadPrxc(t *Task, wg *sync.WaitGroup) {
 	AddTaskCh <- t
 }
 
-// Fetch categories from the server: https://www.blenderkit.com/api/v1/categories/
-// API documentation: https://www.blenderkit.com/api/v1/docs/#operation/categories_list
+// Check if server is available
+// we check for status, so all output is sent to add-on via report,
+// so it can show message to user
+func CheckHealth(data MinimalTaskData) {
+	url := *Server
+	taskUUID := uuid.New().String()
+	task := NewTask(nil, data.AppID, taskUUID, "health_check")
+	AddTaskCh <- task
+	headers := getHeaders(data.APIKey, *SystemID, data.AddonVersion, data.PlatformVersion)
+	req, err := http.NewRequest("GET", url, nil)
+	req.Header = headers
+	resp, err := ClientAPI.Do(req)
+	if err != nil {
+		err = fmt.Errorf("health check request failed: %w", err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err, MessageDetailed: err.Error()}
+		EnqueueConnectionErrorMessage(data.AppID, fmt.Sprintf("Cannot connect to %s. Check internet/proxy/SSL settings.", *Server), err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		_, respString, _ := ParseFailedHTTPResponse(resp)
+		err := fmt.Errorf("health: %s (%s)", respString, resp.Status)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err, MessageDetailed: err.Error()}
+		EnqueueConnectionErrorMessage(data.AppID, fmt.Sprintf("Cannot reach %s right now. (%d)", *Server, resp.StatusCode), err.Error())
+		return
+	}
+
+	TaskFinishCh <- &TaskFinish{AppID: data.AppID, TaskID: taskUUID, Message: "Server is healthy"}
+}
+
+// Fetch categories from the server: https://www.blendkit.com/api/v1/categories/
+// API documentation: https://www.blendkit.com/api/v1/docs/#operation/categories_list
 func FetchCategories(data MinimalTaskData) {
 	url := *Server + "/api/v1/categories"
 	taskUUID := uuid.New().String()
@@ -1202,8 +1347,8 @@ func FetchCategories(data MinimalTaskData) {
 	TaskFinishCh <- &TaskFinish{AppID: data.AppID, TaskID: taskUUID, Message: "Categories updated", Result: respData.Results}
 }
 
-// Fetch disclaimer from the server: https://www.blenderkit.com/api/v1/disclaimer/active/.
-// API documentation:  https://www.blenderkit.com/api/v1/docs/#operation/disclaimer_active_list
+// Fetch disclaimer from the server: https://www.blendkit.com/api/v1/disclaimer/active/.
+// API documentation:  https://www.blendkit.com/api/v1/docs/#operation/disclaimer_active_list
 func FetchDisclaimer(data MinimalTaskData) {
 	url := *Server + "/api/v1/disclaimer/active/"
 	taskUUID := uuid.New().String()
@@ -1249,8 +1394,8 @@ func FetchDisclaimer(data MinimalTaskData) {
 	TaskFinishCh <- &TaskFinish{AppID: data.AppID, TaskID: taskUUID, Message: "Disclaimer fetched", Result: respData}
 }
 
-// Fetch unread notifications from the server: https://www.blenderkit.com/api/v1/notifications/unread/.
-// API documentation: https://www.blenderkit.com/api/v1/docs/#operation/notifications_unread_list
+// Fetch unread notifications from the server: https://www.blendkit.com/api/v1/notifications/unread/.
+// API documentation: https://www.blendkit.com/api/v1/docs/#operation/notifications_unread_list
 func FetchUnreadNotifications(data MinimalTaskData) {
 	url := *Server + "/api/v1/notifications/unread/"
 	taskUUID := uuid.New().String()
@@ -1394,15 +1539,20 @@ func DownloadGravatarImage(data FetchGravatarData) {
 	}
 
 	gravatarPath := filepath.Join(tempDir, gravatar_dirname, filename)
-	exists, _, _ := FileExists(gravatarPath)
+	exists, info, _ := FileExists(gravatarPath)
 	if exists {
-		TaskFinishCh <- &TaskFinish{
-			AppID:   data.AppID,
-			TaskID:  taskID,
-			Message: "Found on disk",
-			Result:  map[string]string{"gravatar_path": gravatarPath},
+		// check if size at least 1kb to avoid using corrupted files
+		if info.Size() < 1024 {
+			BKLog.Printf("%s Gravatar image for %d exists but is smaller than 1KB, re-downloading...", EmoWarning, data.ID)
+		} else {
+			TaskFinishCh <- &TaskFinish{
+				AppID:   data.AppID,
+				TaskID:  taskID,
+				Message: "Found on disk",
+				Result:  map[string]string{"gravatar_path": gravatarPath},
+			}
+			return
 		}
-		return
 	}
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -1702,7 +1852,7 @@ func SendRatingHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // SendRating is a function for sending the user's rating of the asset.
-// API documentation: https://www.blenderkit.com/api/v1/docs/#operation/assets_rating_update
+// API documentation: https://www.blendkit.com/api/v1/docs/#operation/assets_rating_update
 func SendRating(data SendRatingData) {
 	url := fmt.Sprintf("%s/api/v1/assets/%s/rating/%s/", *Server, data.AssetID, data.RatingType)
 	taskUUID := uuid.New().String()
@@ -1877,7 +2027,7 @@ func GetCommentsHandler(w http.ResponseWriter, r *http.Request) {
 
 // GetComments fetches all comments on the given asset.
 //
-// API documentation: https://www.blenderkit.com/api/v1/docs/#operation/comments_read
+// API documentation: https://www.blendkit.com/api/v1/docs/#operation/comments_read
 func GetComments(data GetCommentsData) {
 	url := fmt.Sprintf("%s/api/v1/comments/assets-uuidasset/%s/", *Server, data.AssetID)
 	taskUUID := uuid.New().String()
@@ -1946,9 +2096,9 @@ func CreateCommentHandler(w http.ResponseWriter, r *http.Request) {
 // It first GETs freshest comments data on the asset (from this we need Timestamp and SecurityHash for the POST request).
 // It then creates a new comment through POST request.
 //
-// API docs GET: https://www.blenderkit.com/api/v1/docs/#operation/comments_get
+// API docs GET: https://www.blendkit.com/api/v1/docs/#operation/comments_get
 //
-// API docs POST: https://www.blenderkit.com/api/v1/docs/#operation/comments_comment_create
+// API docs POST: https://www.blendkit.com/api/v1/docs/#operation/comments_comment_create
 func CreateComment(data CreateCommentData) {
 	get_url := fmt.Sprintf("%s/api/v1/comments/asset-comment/%s/", *Server, data.AssetID)
 	post_url := fmt.Sprintf("%s/api/v1/comments/comment/", *Server)
@@ -2082,7 +2232,7 @@ func FeedbackCommentHandler(w http.ResponseWriter, r *http.Request) {
 // FeedbackComment uploads flag on the comment to the server.
 // Flag is basically like/dislike but can be also a different flag.
 //
-// API docs: https://www.blenderkit.com/api/v1/docs/#operation/comments_feedback_create
+// API docs: https://www.blendkit.com/api/v1/docs/#operation/comments_feedback_create
 func FeedbackComment(data FeedbackCommentTaskData) {
 	url := fmt.Sprintf("%s/api/v1/comments/feedback/", *Server)
 	taskUUID := uuid.New().String()
@@ -2166,7 +2316,7 @@ func MarkCommentPrivateHandler(w http.ResponseWriter, r *http.Request) {
 
 // MarkCommentPrivate marks comment as private or public. Reported to user as "comment privacy".
 //
-// API docs: # https://www.blenderkit.com/api/v1/docs/#operation/comments_is_private_create
+// API docs: # https://www.blendkit.com/api/v1/docs/#operation/comments_is_private_create
 func MarkCommentPrivate(data MarkCommentPrivateTaskData) {
 	url := fmt.Sprintf("%s/api/v1/comments/is_private/%d/", *Server, data.CommentID)
 	taskUUID := uuid.New().String()
@@ -2246,7 +2396,7 @@ func MarkNotificationReadHandler(w http.ResponseWriter, r *http.Request) {
 
 // MarkNotificationRead marks notification as read.
 //
-// API docs: https://www.blenderkit.com/api/v1/docs/#operation/notifications_mark-as-read_read
+// API docs: https://www.blendkit.com/api/v1/docs/#operation/notifications_mark-as-read_read
 func MarkNotificationRead(data MarkNotificationReadTaskData) {
 	url := fmt.Sprintf("%s/api/v1/notifications/mark-as-read/%d/", *Server, data.Notification)
 	taskUUID := uuid.New().String()
@@ -2805,7 +2955,7 @@ func PackBlendFile(data AssetUploadRequestData, metadata AssetsCreateResponse, i
 }
 
 // CreateMetadata creates metadata on the server, so it can be saved inside the current file.
-// API docs: https://www.blenderkit.com/api/v1/docs/#tag/assets/operation/assets_create
+// API docs: https://www.blendkit.com/api/v1/docs/#tag/assets/operation/assets_create
 func CreateMetadata(data AssetUploadRequestData) (*AssetsCreateResponse, json.RawMessage, error) {
 	url := fmt.Sprintf("%s/api/v1/assets/", *Server)
 	headers := getHeaders(data.Preferences.APIKey, *SystemID, data.UploadData.AddonVersion, data.UploadData.PlatformVersion)
@@ -2851,7 +3001,7 @@ func CreateMetadata(data AssetUploadRequestData) (*AssetsCreateResponse, json.Ra
 }
 
 // UploadMetadata uploads metadata to the server, so it can be saved inside the current file.
-// API docs: https://www.blenderkit.com/api/v1/docs/#tag/assets/operation/assets_update
+// API docs: https://www.blendkit.com/api/v1/docs/#tag/assets/operation/assets_update
 func UpdateMetadata(data AssetUploadRequestData) (*AssetsCreateResponse, json.RawMessage, error) {
 	url := fmt.Sprintf("%s/api/v1/assets/%s/", *Server, data.ExportData.ID)
 	headers := getHeaders(data.Preferences.APIKey, *SystemID, data.UploadData.AddonVersion, data.UploadData.PlatformVersion)
@@ -3066,7 +3216,7 @@ func bkclientjsGetAssetHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-// Check request origin and allow CORS only if the request comes from *.blenderkit.com or from localhost.
+// Check request origin and allow CORS only if the request comes from *.blendkit.com or from localhost.
 // If origin is allowed
 func allowOrigin(w http.ResponseWriter, r *http.Request) bool {
 	origin := r.Header.Get("Origin")
@@ -3079,8 +3229,8 @@ func allowOrigin(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	host := strings.ToLower(u.Hostname())
-	allowed := host == "blenderkit.com" ||
-		strings.HasSuffix(host, ".blenderkit.com") ||
+	allowed := host == "blendkit.com" ||
+		strings.HasSuffix(host, ".blendkit.com") ||
 		host == "localhost"
 
 	if allowed {
@@ -3211,9 +3361,18 @@ func bkclientjsGetAsset(appID int, apiKey, assetBaseID, assetID, resolution stri
 		}
 	}
 	if exists {
-		fmt.Printf("file %s exists", downloadPath)
-		TaskFinishCh <- &TaskFinish{AppID: appID, TaskID: taskID, Message: "file already on disk", Result: map[string]string{"file_path": downloadPath}}
-		return
+		// check if file is less than 1kb to avoid false positives of existing file which is actually an error message from the server
+		if info.Size() < 1024 {
+			fmt.Println("Existing file is invalid, deleting:", downloadPath)
+			err := os.Remove(downloadPath)
+			if err != nil {
+				fmt.Println("Error deleting file:", err)
+			}
+		} else {
+			fmt.Printf("file %s exists", downloadPath)
+			TaskFinishCh <- &TaskFinish{AppID: appID, TaskID: taskID, Message: "file already on disk", Result: map[string]string{"file_path": downloadPath}}
+			return
+		}
 	}
 
 	file, err := os.Create(downloadPath)
@@ -3324,7 +3483,7 @@ func bkclientjsGetAsset(appID int, apiKey, assetBaseID, assetID, resolution stri
 }
 
 // Get data for single Asset instance by assetBaseID via Search on the API - as advised by Petr.
-// https://devel.blenderkit.com/api/v1/docs/#tag/search
+// https://devel.blendkit.com/api/v1/docs/#tag/search
 func GetAssetInstance(assetBaseID string) (Asset, error) {
 	url := fmt.Sprintf("%s/api/v1/search/?query=asset_base_id:%s", *Server, assetBaseID)
 	resp, err := http.Get(url)
