@@ -69,6 +69,9 @@ func Markdown(version string) string {
 		fmt.Fprintf(&b, "### %s\n\n", tag)
 		for _, r := range routes {
 			fmt.Fprintf(&b, "#### `%s %s`\n\n", strings.Join(r.Methods, " / "), r.Path)
+			if r.Deprecated {
+				b.WriteString("> **Deprecated.** Kept for backward compatibility; use the universal endpoint noted below instead.\n\n")
+			}
 			b.WriteString(r.Description + "\n\n")
 			fmt.Fprintf(&b, "- **Handler:** `%s`\n", r.Handler)
 			if r.Versioned {

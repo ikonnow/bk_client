@@ -30,6 +30,205 @@
         ]
       }
     },
+    "/addons/unsubscribe": {
+      "post": {
+        "description": "Cancels all running tasks for the calling app and removes it from the Client's task registry. Host-agnostic: works for any subscribed software (Blender, Godot, embedders).",
+        "operationId": "unsubscribeAddonHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `ReportData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "ReportData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Unsubscribe an add-on",
+        "tags": [
+          "addons"
+        ]
+      }
+    },
+    "/assets/cancel_download": {
+      "post": {
+        "description": "Cancels an in-progress asset download task.",
+        "operationId": "CancelDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `CancelDownloadData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "CancelDownloadData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Cancel a download",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/assets/download": {
+      "post": {
+        "description": "Starts an asynchronous asset download. Progress and result are reported back through /report tasks.",
+        "operationId": "assetDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `DownloadData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "DownloadData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Download an asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/assets/download_prxc": {
+      "post": {
+        "description": "Starts an asynchronous download of a proxy collection (prxc) asset.\n\nBody embeds DownloadPrxcData plus an app_id field.",
+        "operationId": "assetPrxcDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `DownloadPrxcData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "DownloadPrxcData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Download a proxy collection asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/assets/search": {
+      "post": {
+        "description": "Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.",
+        "operationId": "assetSearchHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SearchTaskData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SearchTaskData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Search assets",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/assets/upload": {
+      "post": {
+        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in Blendkit API key.",
+        "operationId": "assetUploadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `AssetUploadRequestData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "AssetUploadRequestData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Upload an asset",
+        "tags": [
+          "assets"
+        ],
+        "x-requires-api-key": true
+      }
+    },
     "/bkclientjs/get_asset": {
       "post": {
         "description": "CORS-enabled endpoint used by bkclient.js to ask a connected software to download an asset. Supports OPTIONS preflight.",
@@ -86,7 +285,8 @@
     },
     "/blender/asset_download": {
       "post": {
-        "description": "Starts an asynchronous asset download. Progress and result are reported back through /report tasks.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/download. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "assetDownloadHandler",
         "requestBody": {
           "content": {
@@ -111,15 +311,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Download an asset",
+        "summary": "Download an asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/blender/asset_prxc_download": {
       "post": {
-        "description": "Starts an asynchronous download of a proxy collection (prxc) asset.\n\nBody embeds DownloadPrxcData plus an app_id field.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/download_prxc. Kept for backward compatibility with existing Blender add-ons.\n\nBody embeds DownloadPrxcData plus an app_id field.",
         "operationId": "assetPrxcDownloadHandler",
         "requestBody": {
           "content": {
@@ -144,15 +345,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Download a proxy collection asset",
+        "summary": "Download a proxy collection asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/blender/asset_search": {
       "post": {
-        "description": "Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/search. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "assetSearchHandler",
         "requestBody": {
           "content": {
@@ -177,15 +379,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Search assets",
+        "summary": "Search assets (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/blender/asset_upload": {
       "post": {
-        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in Blendkit API key.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/upload. Kept for backward compatibility with existing Blender add-ons.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "assetUploadHandler",
         "requestBody": {
           "content": {
@@ -210,16 +413,17 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Upload an asset",
+        "summary": "Upload an asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ],
         "x-requires-api-key": true
       }
     },
     "/blender/cancel_download": {
       "post": {
-        "description": "Cancels an in-progress asset download task.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/cancel_download. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "CancelDownloadHandler",
         "requestBody": {
           "content": {
@@ -244,15 +448,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Cancel a download",
+        "summary": "Cancel a download (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/blender/unsubscribe_addon": {
       "post": {
-        "description": "Cancels all running tasks for the app and removes it from the Client's task registry.",
+        "deprecated": true,
+        "description": "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "blenderUnsubscribeAddonHandler",
         "requestBody": {
           "content": {
@@ -277,9 +482,9 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Unsubscribe a Blender add-on",
+        "summary": "Unsubscribe a Blender add-on (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
@@ -460,6 +665,27 @@
         ]
       }
     },
+    "/dev": {
+      "get": {
+        "description": "Serves a self-contained, same-origin HTML page with buttons to call the Client's endpoints and view their raw JSON responses. Because it is served by the Client itself, requests are same-origin and the settings endpoints (which emit no CORS headers) work directly from the browser. Manual-testing aid, not a production UI.",
+        "operationId": "devDashboardHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Developer test dashboard",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/godot/report": {
       "post": {
         "description": "Polling endpoint for the Godot add-on. Subscribes the app on first call and returns a SoftwareResponse with the Client version, a connection message and pending tasks.",
@@ -495,7 +721,8 @@
     },
     "/godot/unsubscribe_addon": {
       "post": {
-        "description": "Cancels all running tasks for the Godot app and removes it from the Client's task registry.",
+        "deprecated": true,
+        "description": "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Godot add-ons.",
         "operationId": "godotUnsubscribeAddonHandler",
         "requestBody": {
           "content": {
@@ -520,9 +747,9 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Unsubscribe the Godot add-on",
+        "summary": "Unsubscribe the Godot add-on (deprecated)",
         "tags": [
-          "godot"
+          "deprecated"
         ]
       }
     },
@@ -1041,6 +1268,205 @@
         ]
       }
     },
+    "/v1.10/addons/unsubscribe": {
+      "post": {
+        "description": "Cancels all running tasks for the calling app and removes it from the Client's task registry. Host-agnostic: works for any subscribed software (Blender, Godot, embedders).",
+        "operationId": "unsubscribeAddonHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `ReportData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "ReportData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Unsubscribe an add-on",
+        "tags": [
+          "addons"
+        ]
+      }
+    },
+    "/v1.10/assets/cancel_download": {
+      "post": {
+        "description": "Cancels an in-progress asset download task.",
+        "operationId": "CancelDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `CancelDownloadData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "CancelDownloadData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Cancel a download",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/v1.10/assets/download": {
+      "post": {
+        "description": "Starts an asynchronous asset download. Progress and result are reported back through /report tasks.",
+        "operationId": "assetDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `DownloadData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "DownloadData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Download an asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/v1.10/assets/download_prxc": {
+      "post": {
+        "description": "Starts an asynchronous download of a proxy collection (prxc) asset.\n\nBody embeds DownloadPrxcData plus an app_id field.",
+        "operationId": "assetPrxcDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `DownloadPrxcData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "DownloadPrxcData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Download a proxy collection asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/v1.10/assets/search": {
+      "post": {
+        "description": "Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.",
+        "operationId": "assetSearchHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SearchTaskData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SearchTaskData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Search assets",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/v1.10/assets/upload": {
+      "post": {
+        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in Blendkit API key.",
+        "operationId": "assetUploadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `AssetUploadRequestData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "AssetUploadRequestData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Upload an asset",
+        "tags": [
+          "assets"
+        ],
+        "x-requires-api-key": true
+      }
+    },
     "/v1.10/bkclientjs/get_asset": {
       "post": {
         "description": "CORS-enabled endpoint used by bkclient.js to ask a connected software to download an asset. Supports OPTIONS preflight.",
@@ -1097,7 +1523,8 @@
     },
     "/v1.10/blender/asset_download": {
       "post": {
-        "description": "Starts an asynchronous asset download. Progress and result are reported back through /report tasks.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/download. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "assetDownloadHandler",
         "requestBody": {
           "content": {
@@ -1122,15 +1549,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Download an asset",
+        "summary": "Download an asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/v1.10/blender/asset_prxc_download": {
       "post": {
-        "description": "Starts an asynchronous download of a proxy collection (prxc) asset.\n\nBody embeds DownloadPrxcData plus an app_id field.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/download_prxc. Kept for backward compatibility with existing Blender add-ons.\n\nBody embeds DownloadPrxcData plus an app_id field.",
         "operationId": "assetPrxcDownloadHandler",
         "requestBody": {
           "content": {
@@ -1155,15 +1583,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Download a proxy collection asset",
+        "summary": "Download a proxy collection asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/v1.10/blender/asset_search": {
       "post": {
-        "description": "Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/search. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "assetSearchHandler",
         "requestBody": {
           "content": {
@@ -1188,15 +1617,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Search assets",
+        "summary": "Search assets (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/v1.10/blender/asset_upload": {
       "post": {
-        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in Blendkit API key.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/upload. Kept for backward compatibility with existing Blender add-ons.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "assetUploadHandler",
         "requestBody": {
           "content": {
@@ -1221,16 +1651,17 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Upload an asset",
+        "summary": "Upload an asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ],
         "x-requires-api-key": true
       }
     },
     "/v1.10/blender/cancel_download": {
       "post": {
-        "description": "Cancels an in-progress asset download task.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/cancel_download. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "CancelDownloadHandler",
         "requestBody": {
           "content": {
@@ -1255,15 +1686,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Cancel a download",
+        "summary": "Cancel a download (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/v1.10/blender/unsubscribe_addon": {
       "post": {
-        "description": "Cancels all running tasks for the app and removes it from the Client's task registry.",
+        "deprecated": true,
+        "description": "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "blenderUnsubscribeAddonHandler",
         "requestBody": {
           "content": {
@@ -1288,9 +1720,9 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Unsubscribe a Blender add-on",
+        "summary": "Unsubscribe a Blender add-on (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
@@ -1450,6 +1882,27 @@
         ]
       }
     },
+    "/v1.10/dev": {
+      "get": {
+        "description": "Serves a self-contained, same-origin HTML page with buttons to call the Client's endpoints and view their raw JSON responses. Because it is served by the Client itself, requests are same-origin and the settings endpoints (which emit no CORS headers) work directly from the browser. Manual-testing aid, not a production UI.",
+        "operationId": "devDashboardHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Developer test dashboard",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/v1.10/godot/report": {
       "post": {
         "description": "Polling endpoint for the Godot add-on. Subscribes the app on first call and returns a SoftwareResponse with the Client version, a connection message and pending tasks.",
@@ -1485,7 +1938,8 @@
     },
     "/v1.10/godot/unsubscribe_addon": {
       "post": {
-        "description": "Cancels all running tasks for the Godot app and removes it from the Client's task registry.",
+        "deprecated": true,
+        "description": "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Godot add-ons.",
         "operationId": "godotUnsubscribeAddonHandler",
         "requestBody": {
           "content": {
@@ -1510,9 +1964,9 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Unsubscribe the Godot add-on",
+        "summary": "Unsubscribe the Godot add-on (deprecated)",
         "tags": [
-          "godot"
+          "deprecated"
         ]
       }
     },
@@ -2386,7 +2840,10 @@
       "name": "login"
     },
     {
-      "name": "blender"
+      "name": "assets"
+    },
+    {
+      "name": "addons"
     },
     {
       "name": "host-agnostic"
@@ -2411,6 +2868,9 @@
     },
     {
       "name": "godot"
+    },
+    {
+      "name": "deprecated"
     }
   ]
 }

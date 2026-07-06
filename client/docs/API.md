@@ -20,6 +20,7 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 | POST | `/report` | ✓ |  | Poll for tasks (Blender) | `GetReportData` |
 | GET, POST | `/shutdown` | ✓ |  | Shut down the Client | — |
 | GET | `/debug` | ✓ |  | Network/debug diagnostics | — |
+| GET | `/dev` | ✓ |  | Developer test dashboard | — |
 
 ### settings
 
@@ -38,16 +39,21 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 | POST | `/oauth2/verification_data` | ✓ |  | Store OAuth2 PKCE session | `OAuth2VerificationData` |
 | POST | `/oauth2/logout` | ✓ | 🔑 | Log out / revoke tokens | `RefreshTokenData` |
 
-### blender
+### assets
 
 | Method | Path | Versioned | Auth | Summary | Request body |
 |---|---|:---:|:---:|---|---|
-| POST | `/blender/unsubscribe_addon` | ✓ |  | Unsubscribe a Blender add-on | `ReportData` |
-| POST | `/blender/cancel_download` | ✓ |  | Cancel a download | `CancelDownloadData` |
-| POST | `/blender/asset_download` | ✓ |  | Download an asset | `DownloadData` |
-| POST | `/blender/asset_prxc_download` | ✓ |  | Download a proxy collection asset | `DownloadPrxcData` |
-| POST | `/blender/asset_search` | ✓ |  | Search assets | `SearchTaskData` |
-| POST | `/blender/asset_upload` | ✓ | 🔑 | Upload an asset | `AssetUploadRequestData` |
+| POST | `/assets/search` | ✓ |  | Search assets | `SearchTaskData` |
+| POST | `/assets/download` | ✓ |  | Download an asset | `DownloadData` |
+| POST | `/assets/download_prxc` | ✓ |  | Download a proxy collection asset | `DownloadPrxcData` |
+| POST | `/assets/upload` | ✓ | 🔑 | Upload an asset | `AssetUploadRequestData` |
+| POST | `/assets/cancel_download` | ✓ |  | Cancel a download | `CancelDownloadData` |
+
+### addons
+
+| Method | Path | Versioned | Auth | Summary | Request body |
+|---|---|:---:|:---:|---|---|
+| POST | `/addons/unsubscribe` | ✓ |  | Unsubscribe an add-on | `ReportData` |
 
 ### host-agnostic
 
@@ -107,7 +113,18 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 | Method | Path | Versioned | Auth | Summary | Request body |
 |---|---|:---:|:---:|---|---|
 | POST | `/godot/report` | ✓ |  | Poll for tasks (Godot) | `Software` |
-| POST | `/godot/unsubscribe_addon` | ✓ |  | Unsubscribe the Godot add-on | `ReportData` |
+
+### deprecated
+
+| Method | Path | Versioned | Auth | Summary | Request body |
+|---|---|:---:|:---:|---|---|
+| POST | `/blender/asset_search` | ✓ |  | Search assets (deprecated) | `SearchTaskData` |
+| POST | `/blender/asset_download` | ✓ |  | Download an asset (deprecated) | `DownloadData` |
+| POST | `/blender/asset_prxc_download` | ✓ |  | Download a proxy collection asset (deprecated) | `DownloadPrxcData` |
+| POST | `/blender/asset_upload` | ✓ | 🔑 | Upload an asset (deprecated) | `AssetUploadRequestData` |
+| POST | `/blender/cancel_download` | ✓ |  | Cancel a download (deprecated) | `CancelDownloadData` |
+| POST | `/blender/unsubscribe_addon` | ✓ |  | Unsubscribe a Blender add-on (deprecated) | `ReportData` |
+| POST | `/godot/unsubscribe_addon` | ✓ |  | Unsubscribe the Godot add-on (deprecated) | `ReportData` |
 
 ## Endpoint details
 
@@ -140,6 +157,13 @@ Returns diagnostic information about the Client's network configuration, useful 
 
 - **Handler:** `DebugNetworkHandler`
 - **Versioned alias:** `/v1.10/debug`
+
+#### `GET /dev`
+
+Serves a self-contained, same-origin HTML page with buttons to call the Client's endpoints and view their raw JSON responses. Because it is served by the Client itself, requests are same-origin and the settings endpoints (which emit no CORS headers) work directly from the browser. Manual-testing aid, not a production UI.
+
+- **Handler:** `devDashboardHandler`
+- **Versioned alias:** `/v1.10/dev`
 
 ### settings
 
@@ -200,57 +224,59 @@ Revokes the API key and refresh token on the server and logs the user out of all
 - **Request body:** JSON `RefreshTokenData` (Go struct in package main)
 - **Auth:** requires a logged-in Blendkit API key
 
-### blender
+### assets
 
-#### `POST /blender/unsubscribe_addon`
-
-Cancels all running tasks for the app and removes it from the Client's task registry.
-
-- **Handler:** `blenderUnsubscribeAddonHandler`
-- **Versioned alias:** `/v1.10/blender/unsubscribe_addon`
-- **Request body:** JSON `ReportData` (Go struct in package main)
-
-#### `POST /blender/cancel_download`
-
-Cancels an in-progress asset download task.
-
-- **Handler:** `CancelDownloadHandler`
-- **Versioned alias:** `/v1.10/blender/cancel_download`
-- **Request body:** JSON `CancelDownloadData` (Go struct in package main)
-
-#### `POST /blender/asset_download`
-
-Starts an asynchronous asset download. Progress and result are reported back through /report tasks.
-
-- **Handler:** `assetDownloadHandler`
-- **Versioned alias:** `/v1.10/blender/asset_download`
-- **Request body:** JSON `DownloadData` (Go struct in package main)
-
-#### `POST /blender/asset_prxc_download`
-
-Starts an asynchronous download of a proxy collection (prxc) asset.
-
-- **Handler:** `assetPrxcDownloadHandler`
-- **Versioned alias:** `/v1.10/blender/asset_prxc_download`
-- **Request body:** JSON `DownloadPrxcData` (Go struct in package main)
-- **Request notes:** Body embeds DownloadPrxcData plus an app_id field.
-
-#### `POST /blender/asset_search`
+#### `POST /assets/search`
 
 Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.
 
 - **Handler:** `assetSearchHandler`
-- **Versioned alias:** `/v1.10/blender/asset_search`
+- **Versioned alias:** `/v1.10/assets/search`
 - **Request body:** JSON `SearchTaskData` (Go struct in package main)
 
-#### `POST /blender/asset_upload`
+#### `POST /assets/download`
+
+Starts an asynchronous asset download. Progress and result are reported back through /report tasks.
+
+- **Handler:** `assetDownloadHandler`
+- **Versioned alias:** `/v1.10/assets/download`
+- **Request body:** JSON `DownloadData` (Go struct in package main)
+
+#### `POST /assets/download_prxc`
+
+Starts an asynchronous download of a proxy collection (prxc) asset.
+
+- **Handler:** `assetPrxcDownloadHandler`
+- **Versioned alias:** `/v1.10/assets/download_prxc`
+- **Request body:** JSON `DownloadPrxcData` (Go struct in package main)
+- **Request notes:** Body embeds DownloadPrxcData plus an app_id field.
+
+#### `POST /assets/upload`
 
 Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.
 
 - **Handler:** `assetUploadHandler`
-- **Versioned alias:** `/v1.10/blender/asset_upload`
+- **Versioned alias:** `/v1.10/assets/upload`
 - **Request body:** JSON `AssetUploadRequestData` (Go struct in package main)
 - **Auth:** requires a logged-in Blendkit API key
+
+#### `POST /assets/cancel_download`
+
+Cancels an in-progress asset download task.
+
+- **Handler:** `CancelDownloadHandler`
+- **Versioned alias:** `/v1.10/assets/cancel_download`
+- **Request body:** JSON `CancelDownloadData` (Go struct in package main)
+
+### addons
+
+#### `POST /addons/unsubscribe`
+
+Cancels all running tasks for the calling app and removes it from the Client's task registry. Host-agnostic: works for any subscribed software (Blender, Godot, embedders).
+
+- **Handler:** `unsubscribeAddonHandler`
+- **Versioned alias:** `/v1.10/addons/unsubscribe`
+- **Request body:** JSON `ReportData` (Go struct in package main)
 
 ### host-agnostic
 
@@ -428,9 +454,75 @@ Polling endpoint for the Godot add-on. Subscribes the app on first call and retu
 - **Versioned alias:** `/v1.10/godot/report`
 - **Request body:** JSON `Software` (Go struct in package main)
 
+### deprecated
+
+#### `POST /blender/asset_search`
+
+> **Deprecated.** Kept for backward compatibility; use the universal endpoint noted below instead.
+
+Deprecated alias of /assets/search. Kept for backward compatibility with existing Blender add-ons.
+
+- **Handler:** `assetSearchHandler`
+- **Versioned alias:** `/v1.10/blender/asset_search`
+- **Request body:** JSON `SearchTaskData` (Go struct in package main)
+
+#### `POST /blender/asset_download`
+
+> **Deprecated.** Kept for backward compatibility; use the universal endpoint noted below instead.
+
+Deprecated alias of /assets/download. Kept for backward compatibility with existing Blender add-ons.
+
+- **Handler:** `assetDownloadHandler`
+- **Versioned alias:** `/v1.10/blender/asset_download`
+- **Request body:** JSON `DownloadData` (Go struct in package main)
+
+#### `POST /blender/asset_prxc_download`
+
+> **Deprecated.** Kept for backward compatibility; use the universal endpoint noted below instead.
+
+Deprecated alias of /assets/download_prxc. Kept for backward compatibility with existing Blender add-ons.
+
+- **Handler:** `assetPrxcDownloadHandler`
+- **Versioned alias:** `/v1.10/blender/asset_prxc_download`
+- **Request body:** JSON `DownloadPrxcData` (Go struct in package main)
+- **Request notes:** Body embeds DownloadPrxcData plus an app_id field.
+
+#### `POST /blender/asset_upload`
+
+> **Deprecated.** Kept for backward compatibility; use the universal endpoint noted below instead.
+
+Deprecated alias of /assets/upload. Kept for backward compatibility with existing Blender add-ons.
+
+- **Handler:** `assetUploadHandler`
+- **Versioned alias:** `/v1.10/blender/asset_upload`
+- **Request body:** JSON `AssetUploadRequestData` (Go struct in package main)
+- **Auth:** requires a logged-in Blendkit API key
+
+#### `POST /blender/cancel_download`
+
+> **Deprecated.** Kept for backward compatibility; use the universal endpoint noted below instead.
+
+Deprecated alias of /assets/cancel_download. Kept for backward compatibility with existing Blender add-ons.
+
+- **Handler:** `CancelDownloadHandler`
+- **Versioned alias:** `/v1.10/blender/cancel_download`
+- **Request body:** JSON `CancelDownloadData` (Go struct in package main)
+
+#### `POST /blender/unsubscribe_addon`
+
+> **Deprecated.** Kept for backward compatibility; use the universal endpoint noted below instead.
+
+Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Blender add-ons.
+
+- **Handler:** `blenderUnsubscribeAddonHandler`
+- **Versioned alias:** `/v1.10/blender/unsubscribe_addon`
+- **Request body:** JSON `ReportData` (Go struct in package main)
+
 #### `POST /godot/unsubscribe_addon`
 
-Cancels all running tasks for the Godot app and removes it from the Client's task registry.
+> **Deprecated.** Kept for backward compatibility; use the universal endpoint noted below instead.
+
+Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Godot add-ons.
 
 - **Handler:** `godotUnsubscribeAddonHandler`
 - **Versioned alias:** `/v1.10/godot/unsubscribe_addon`

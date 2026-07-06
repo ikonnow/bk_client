@@ -56,14 +56,19 @@ func runTray(serverURL, listenAddr string) {
 
 		systray.AddSeparator()
 		mOpenWeb := systray.AddMenuItem("Open Blendkit.com", "Open the Blendkit website in your browser")
+		mOpenDev := systray.AddMenuItem("Open Dev Dashboard", "Open the Client's developer dashboard in your browser")
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("Quit", "Stop the Blendkit-Client")
+
+		devURL := fmt.Sprintf("http://%s/dev", listenAddr)
 
 		go func() {
 			for {
 				select {
 				case <-mOpenWeb.ClickedCh:
 					openInBrowser(serverURL)
+				case <-mOpenDev.ClickedCh:
+					openInBrowser(devURL)
 				case <-mQuit.ClickedCh:
 					systray.Quit()
 					return

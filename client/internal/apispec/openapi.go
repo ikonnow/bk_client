@@ -134,6 +134,10 @@ func operation(r Route) map[string]any {
 		op["x-requires-api-key"] = true
 	}
 
+	if r.Deprecated {
+		op["deprecated"] = true
+	}
+
 	return op
 }
 

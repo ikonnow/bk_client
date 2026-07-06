@@ -59,3 +59,27 @@ fails the build if the committed files are stale, then runs `go vet` and the tes
 > schemas are not yet generated because those structs live in `package main`; a future,
 > non-frozen change can move the shared request structs into a package so schemas can be emitted
 > automatically.
+
+### Developer dashboard (`/dev`)
+
+The Client serves a self-contained developer dashboard at the `/dev` endpoint. It's an
+HTML page with buttons to call the Client's endpoints and view their raw responses,
+useful for manual testing.
+
+Because the page is served by the Client itself, all requests it makes are same-origin,
+so endpoints that don't emit CORS headers (like the settings endpoints) work directly
+from the browser.
+
+To use it, start the Client and open the dashboard in a browser at the Client's port, e.g.:
+
+```
+http://localhost:<port>/dev
+```
+
+For example, to build and run the Client manually and open the dashboard:
+
+```sh
+go build -o bkclient .
+./bkclient --port 63998
+# then open http://localhost:63998/dev
+```

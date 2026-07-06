@@ -355,6 +355,10 @@ func main() {
 	mux.HandleFunc("/debug", DebugNetworkHandler)
 	mux.HandleFunc("/"+vapi+"/debug", DebugNetworkHandler)
 
+	// DEV DASHBOARD - same-origin HTML page for manual endpoint testing.
+	mux.HandleFunc("/dev", devDashboardHandler)
+	mux.HandleFunc("/"+vapi+"/dev", devDashboardHandler)
+
 	// SETTINGS - Client is the source of truth; plugins sync from here.
 	mux.HandleFunc("/settings/get", getSettingsHandler)
 	mux.HandleFunc("/"+vapi+"/settings/get", getSettingsHandler)
@@ -372,19 +376,22 @@ func main() {
 	mux.HandleFunc("/oauth2/logout", OAuth2LogoutHandler)
 	mux.HandleFunc("/"+vapi+"/oauth2/logout", OAuth2LogoutHandler)
 
-	// BLENDER SPECIFIC HANDLERS
-	mux.HandleFunc("/blender/unsubscribe_addon", blenderUnsubscribeAddonHandler)
-	mux.HandleFunc("/"+vapi+"/blender/unsubscribe_addon", blenderUnsubscribeAddonHandler)
-	mux.HandleFunc("/blender/cancel_download", CancelDownloadHandler)
-	mux.HandleFunc("/"+vapi+"/blender/cancel_download", CancelDownloadHandler)
-	mux.HandleFunc("/blender/asset_download", assetDownloadHandler)
-	mux.HandleFunc("/"+vapi+"/blender/asset_download", assetDownloadHandler)
-	mux.HandleFunc("/blender/asset_prxc_download", assetPrxcDownloadHandler)
-	mux.HandleFunc("/"+vapi+"/blender/asset_prxc_download", assetPrxcDownloadHandler)
-	mux.HandleFunc("/blender/asset_search", assetSearchHandler)
-	mux.HandleFunc("/"+vapi+"/blender/asset_search", assetSearchHandler)
-	mux.HandleFunc("/blender/asset_upload", assetUploadHandler)
-	mux.HandleFunc("/"+vapi+"/blender/asset_upload", assetUploadHandler)
+	// UNIVERSAL ASSET & ADD-ON ENDPOINTS - host-agnostic; any plugin (Blender,
+	// Godot, embedders) can call these. These are the preferred endpoints; the
+	// app-prefixed aliases in the DEPRECATED section below are kept only for
+	// backward compatibility.
+	mux.HandleFunc("/assets/search", assetSearchHandler)
+	mux.HandleFunc("/"+vapi+"/assets/search", assetSearchHandler)
+	mux.HandleFunc("/assets/download", assetDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/assets/download", assetDownloadHandler)
+	mux.HandleFunc("/assets/download_prxc", assetPrxcDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/assets/download_prxc", assetPrxcDownloadHandler)
+	mux.HandleFunc("/assets/upload", assetUploadHandler)
+	mux.HandleFunc("/"+vapi+"/assets/upload", assetUploadHandler)
+	mux.HandleFunc("/assets/cancel_download", CancelDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/assets/cancel_download", CancelDownloadHandler)
+	mux.HandleFunc("/addons/unsubscribe", unsubscribeAddonHandler)
+	mux.HandleFunc("/"+vapi+"/addons/unsubscribe", unsubscribeAddonHandler)
 
 	// HOST-AGNOSTIC: run a Python recipe under headless Blender.
 	// Used by external embedders (e.g. the Rhino plug-in) and
@@ -438,6 +445,28 @@ func main() {
 	// OTHER SOFTWARES
 	mux.HandleFunc("/godot/report", godotReportHandler)
 	mux.HandleFunc("/"+vapi+"/godot/report", godotReportHandler)
+
+	// DEPRECATED - app-prefixed aliases kept for backward compatibility with
+	// existing add-ons. New code should use the universal endpoints above:
+	//   /blender/asset_search       -> /assets/search
+	//   /blender/asset_download     -> /assets/download
+	//   /blender/asset_prxc_download-> /assets/download_prxc
+	//   /blender/asset_upload       -> /assets/upload
+	//   /blender/cancel_download    -> /assets/cancel_download
+	//   /blender/unsubscribe_addon  -> /addons/unsubscribe
+	//   /godot/unsubscribe_addon    -> /addons/unsubscribe
+	mux.HandleFunc("/blender/asset_search", assetSearchHandler)
+	mux.HandleFunc("/"+vapi+"/blender/asset_search", assetSearchHandler)
+	mux.HandleFunc("/blender/asset_download", assetDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/blender/asset_download", assetDownloadHandler)
+	mux.HandleFunc("/blender/asset_prxc_download", assetPrxcDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/blender/asset_prxc_download", assetPrxcDownloadHandler)
+	mux.HandleFunc("/blender/asset_upload", assetUploadHandler)
+	mux.HandleFunc("/"+vapi+"/blender/asset_upload", assetUploadHandler)
+	mux.HandleFunc("/blender/cancel_download", CancelDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/blender/cancel_download", CancelDownloadHandler)
+	mux.HandleFunc("/blender/unsubscribe_addon", blenderUnsubscribeAddonHandler)
+	mux.HandleFunc("/"+vapi+"/blender/unsubscribe_addon", blenderUnsubscribeAddonHandler)
 	mux.HandleFunc("/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 	mux.HandleFunc("/"+vapi+"/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 
@@ -738,6 +767,28 @@ func godotUnsubscribeAddonHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	unsubscribeAddon(data.AppID, "Godot")
+	w.WriteHeader(http.StatusOK)
+}
+
+// unsubscribeAddonHandler is the universal, host-agnostic unsubscribe endpoint.
+// Any plugin (Blender, Godot, embedders) can call it; the software name is
+// resolved from the subscribed-software registry purely for logging.
+func unsubscribeAddonHandler(w http.ResponseWriter, r *http.Request) {
+	var data ReportData
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		http.Error(w, "Error parsing JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	name := "add-on"
+	AvailableSoftwaresMux.Lock()
+	if sw, ok := AvailableSoftwares[data.AppID]; ok && sw.Name != "" {
+		name = sw.Name
+	}
+	AvailableSoftwaresMux.Unlock()
+
+	unsubscribeAddon(data.AppID, name)
 	w.WriteHeader(http.StatusOK)
 }
 
