@@ -1,12 +1,12 @@
-# BlenderKit-Client
+# Blendkit-Client
 
-This is a Client for BlenderKit (previously daemon).
-It's a local server that listens for requests from BlenderKit add-ons and processes them.
+This is a Client for Blendkit (previously daemon).
+It's a local server that listens for requests from Blendkit add-ons and processes them.
 Written in Go.
 
 ## How is it run
 The Client is built for Windows, MacOS and Linux for both x86_64 and arm64.
-BlenderKit-Client binaries are shipped in the blenderkit.zip file, in /client directory where normally in the repo Client's source code is placed.
+Blendkit-Client binaries are shipped in the blenderkit.zip file, in /client directory where normally in the repo Client's source code is placed.
 On add-on start, the Client binary is copied into global_dir/client/bin/vX.Y.Z directory, and started.
 
 ### Client start
@@ -59,3 +59,27 @@ fails the build if the committed files are stale, then runs `go vet` and the tes
 > schemas are not yet generated because those structs live in `package main`; a future,
 > non-frozen change can move the shared request structs into a package so schemas can be emitted
 > automatically.
+
+### Developer dashboard (`/dev`)
+
+The Client serves a self-contained developer dashboard at the `/dev` endpoint. It's an
+HTML page with buttons to call the Client's endpoints and view their raw responses,
+useful for manual testing.
+
+Because the page is served by the Client itself, all requests it makes are same-origin,
+so endpoints that don't emit CORS headers (like the settings endpoints) work directly
+from the browser.
+
+To use it, start the Client and open the dashboard in a browser at the Client's port, e.g.:
+
+```
+http://localhost:<port>/dev
+```
+
+For example, to build and run the Client manually and open the dashboard:
+
+```sh
+go build -o bkclient .
+./bkclient --port 63998
+# then open http://localhost:63998/dev
+```

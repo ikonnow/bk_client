@@ -37,33 +37,38 @@ const traySupported = true
 //go:embed icons/blenderkit.ico
 var trayIcon []byte
 
-// runTray shows the BlenderKit-Client system tray icon and blocks until the user
+// runTray shows the Blendkit-Client system tray icon and blocks until the user
 // quits from its menu. It is expected to be called on the main goroutine while
 // the HTTP server runs in a separate goroutine.
 //
-// serverURL is the BlenderKit website the tray links to; listenAddr is the local
+// serverURL is the Blendkit website the tray links to; listenAddr is the local
 // address the Client is serving on (shown for reference).
 func runTray(serverURL, listenAddr string) {
 	onReady := func() {
 		systray.SetIcon(trayIcon)
-		systray.SetTitle("BlenderKit-Client")
-		systray.SetTooltip(fmt.Sprintf("BlenderKit-Client v%s — %s", ClientVersion, listenAddr))
+		systray.SetTitle("Blendkit-Client")
+		systray.SetTooltip(fmt.Sprintf("Blendkit-Client v%s — %s", ClientVersion, listenAddr))
 
-		mVersion := systray.AddMenuItem(fmt.Sprintf("BlenderKit-Client v%s", ClientVersion), "")
+		mVersion := systray.AddMenuItem(fmt.Sprintf("Blendkit-Client v%s", ClientVersion), "")
 		mVersion.Disable()
 		mAddr := systray.AddMenuItem("Listening on "+listenAddr, "Local address the Client serves on")
 		mAddr.Disable()
 
 		systray.AddSeparator()
-		mOpenWeb := systray.AddMenuItem("Open BlenderKit.com", "Open the BlenderKit website in your browser")
+		mOpenWeb := systray.AddMenuItem("Open Blendkit.com", "Open the Blendkit website in your browser")
+		mOpenDev := systray.AddMenuItem("Open Dev Dashboard", "Open the Client's developer dashboard in your browser")
 		systray.AddSeparator()
-		mQuit := systray.AddMenuItem("Quit", "Stop the BlenderKit-Client")
+		mQuit := systray.AddMenuItem("Quit", "Stop the Blendkit-Client")
+
+		devURL := fmt.Sprintf("http://%s/dev", listenAddr)
 
 		go func() {
 			for {
 				select {
 				case <-mOpenWeb.ClickedCh:
 					openInBrowser(serverURL)
+				case <-mOpenDev.ClickedCh:
+					openInBrowser(devURL)
 				case <-mQuit.ClickedCh:
 					systray.Quit()
 					return

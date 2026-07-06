@@ -1,4 +1,4 @@
-// Package apispec is the single source of truth for the BlenderKit-Client HTTP API.
+// Package apispec is the single source of truth for the Blendkit-Client HTTP API.
 //
 // The Routes() registry below describes every endpoint the Client exposes. It is
 // consumed by:
@@ -34,16 +34,21 @@ type Route struct {
 	// RequestNote documents non-JSON inputs (e.g. query parameters) or other
 	// request details that the struct name alone does not convey.
 	RequestNote string
-	// RequiresAPIKey reports whether a logged-in BlenderKit API key is needed
+	// RequiresAPIKey reports whether a logged-in Blendkit API key is needed
 	// for the endpoint to do useful work.
 	RequiresAPIKey bool
+	// Deprecated marks routes kept only for backward compatibility. New code
+	// should use the universal replacement noted in the Description.
+	Deprecated bool
 }
 
 // Tags are the endpoint groups in the order they should appear in docs.
 var Tags = []string{
 	"core",
+	"settings",
 	"login",
-	"blender",
+	"assets",
+	"addons",
 	"host-agnostic",
 	"profiles",
 	"comments",
@@ -52,6 +57,7 @@ var Tags = []string{
 	"wrappers",
 	"bkclientjs",
 	"godot",
+	"deprecated",
 }
 
 // Routes returns the full registry of Client HTTP endpoints.
@@ -86,12 +92,38 @@ func Routes() []Route {
 			Description: "Returns diagnostic information about the Client's network configuration, useful for troubleshooting connectivity and proxy issues.",
 			Handler:     "DebugNetworkHandler",
 		},
+		{
+			Path: "/dev", Methods: []string{"GET"}, Versioned: true, Tag: "core",
+			Summary:     "Developer test dashboard",
+			Description: "Serves a self-contained, same-origin HTML page with buttons to call the Client's endpoints and view their raw JSON responses. Because it is served by the Client itself, requests are same-origin and the settings endpoints (which emit no CORS headers) work directly from the browser. Manual-testing aid, not a production UI.",
+			Handler:     "devDashboardHandler",
+		},
+
+		// SETTINGS - the Client is the source of truth; plugins sync from it.
+		{
+			Path: "/settings/get", Methods: []string{"GET", "POST"}, Versioned: true, Tag: "settings",
+			Summary:     "Get Client settings",
+			Description: "Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.",
+			Handler:     "getSettingsHandler",
+		},
+		{
+			Path: "/settings/set", Methods: []string{"POST"}, Versioned: true, Tag: "settings",
+			Summary:     "Change shared settings",
+			Description: "Applies a change to the shared settings (only the fields present in the body are modified), bumps the revision and returns the new snapshot. The change is broadcast to every connected plugin on their next /report poll.",
+			Handler:     "setSettingsHandler", RequestType: "SetSettingsData",
+		},
+		{
+			Path: "/settings/set_variable", Methods: []string{"POST"}, Versioned: true, Tag: "settings",
+			Summary:     "Store a variable",
+			Description: "Stores a free-form variable/value pair on behalf of a plugin. An empty 'plugin' stores it globally (without plugin association); a non-empty 'plugin' namespaces it under that plugin name (e.g. blender -> executable). Bumps the revision and returns the new snapshot; the change is broadcast on the next /report poll.",
+			Handler:     "setVariableHandler", RequestType: "SetVariableData",
+		},
 
 		// LOGIN / OAUTH2
 		{
 			Path: "/consumer/exchange/", Methods: []string{"GET"}, Versioned: false, Tag: "login",
 			Summary:     "OAuth2 redirect landing",
-			Description: "Browser redirect target after the user logs in on blenderkit.com. Validates the OAuth2 code and state query parameters, exchanges the code for tokens and redirects the browser to the server's oauth-landing page. Intentionally unversioned to keep the server-side redirect URL simple.",
+			Description: "Browser redirect target after the user logs in on blendkit.com. Validates the OAuth2 code and state query parameters, exchanges the code for tokens and redirects the browser to the server's oauth-landing page. Intentionally unversioned to keep the server-side redirect URL simple.",
 			Handler:     "consumerExchangeHandler",
 			RequestNote: "Query parameters: code (authorization code), state (CSRF/session state).",
 		},
@@ -114,43 +146,52 @@ func Routes() []Route {
 			Handler:     "OAuth2LogoutHandler", RequestType: "RefreshTokenData", RequiresAPIKey: true,
 		},
 
-		// BLENDER-SPECIFIC
+		// ASSETS - universal, host-agnostic asset operations. Any plugin
+		// (Blender, Godot, embedders) may call these.
 		{
-			Path: "/blender/unsubscribe_addon", Methods: []string{"POST"}, Versioned: true, Tag: "blender",
-			Summary:     "Unsubscribe a Blender add-on",
-			Description: "Cancels all running tasks for the app and removes it from the Client's task registry.",
-			Handler:     "blenderUnsubscribeAddonHandler", RequestType: "ReportData",
+			Path: "/assets/search", Methods: []string{"POST"}, Versioned: true, Tag: "assets",
+			Summary:     "Search assets",
+			Description: "Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.",
+			Handler:     "assetSearchHandler", RequestType: "SearchTaskData",
 		},
 		{
-			Path: "/blender/cancel_download", Methods: []string{"POST"}, Versioned: true, Tag: "blender",
-			Summary:     "Cancel a download",
-			Description: "Cancels an in-progress asset download task.",
-			Handler:     "CancelDownloadHandler", RequestType: "CancelDownloadData",
-		},
-		{
-			Path: "/blender/asset_download", Methods: []string{"POST"}, Versioned: true, Tag: "blender",
+			Path: "/assets/download", Methods: []string{"POST"}, Versioned: true, Tag: "assets",
 			Summary:     "Download an asset",
 			Description: "Starts an asynchronous asset download. Progress and result are reported back through /report tasks.",
 			Handler:     "assetDownloadHandler", RequestType: "DownloadData",
 		},
 		{
-			Path: "/blender/asset_prxc_download", Methods: []string{"POST"}, Versioned: true, Tag: "blender",
+			Path: "/assets/download_prxc", Methods: []string{"POST"}, Versioned: true, Tag: "assets",
 			Summary:     "Download a proxy collection asset",
 			Description: "Starts an asynchronous download of a proxy collection (prxc) asset.",
 			Handler:     "assetPrxcDownloadHandler", RequestType: "DownloadPrxcData",
 			RequestNote: "Body embeds DownloadPrxcData plus an app_id field.",
 		},
 		{
-			Path: "/blender/asset_search", Methods: []string{"POST"}, Versioned: true, Tag: "blender",
-			Summary:     "Search assets",
-			Description: "Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.",
-			Handler:     "assetSearchHandler", RequestType: "SearchTaskData",
-		},
-		{
-			Path: "/blender/asset_upload", Methods: []string{"POST"}, Versioned: true, Tag: "blender",
+			Path: "/assets/upload", Methods: []string{"POST"}, Versioned: true, Tag: "assets",
 			Summary:     "Upload an asset",
 			Description: "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.",
 			Handler:     "assetUploadHandler", RequestType: "AssetUploadRequestData", RequiresAPIKey: true,
+		},
+		{
+			Path: "/assets/cancel_download", Methods: []string{"POST"}, Versioned: true, Tag: "assets",
+			Summary:     "Cancel a download",
+			Description: "Cancels an in-progress asset download task.",
+			Handler:     "CancelDownloadHandler", RequestType: "CancelDownloadData",
+		},
+
+		// ADD-ONS - universal add-on lifecycle.
+		{
+			Path: "/addons/list", Methods: []string{"GET", "POST"}, Versioned: true, Tag: "addons",
+			Summary:     "List subscribed add-ons",
+			Description: "Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.",
+			Handler:     "listAddonsHandler",
+		},
+		{
+			Path: "/addons/unsubscribe", Methods: []string{"POST"}, Versioned: true, Tag: "addons",
+			Summary:     "Unsubscribe an add-on",
+			Description: "Cancels all running tasks for the calling app and removes it from the Client's task registry. Host-agnostic: works for any subscribed software (Blender, Godot, embedders).",
+			Handler:     "unsubscribeAddonHandler", RequestType: "ReportData",
 		},
 
 		// HOST-AGNOSTIC
@@ -171,7 +212,7 @@ func Routes() []Route {
 		{
 			Path: "/profiles/get_user_profile", Methods: []string{"POST"}, Versioned: true, Tag: "profiles",
 			Summary:     "Get user profile",
-			Description: "Fetches the logged-in user's BlenderKit profile.",
+			Description: "Fetches the logged-in user's Blendkit profile.",
 			Handler:     "GetUserProfileHandler", RequestType: "MinimalTaskData", RequiresAPIKey: true,
 		},
 
@@ -251,13 +292,13 @@ func Routes() []Route {
 		{
 			Path: "/wrappers/blocking_request", Methods: []string{"POST"}, Versioned: true, Tag: "wrappers",
 			Summary:     "Proxy a blocking HTTP request",
-			Description: "Blocking helper that performs an arbitrary HTTP request to the BlenderKit server through the Client's configured HTTP client and returns the response.",
+			Description: "Blocking helper that performs an arbitrary HTTP request to the Blendkit server through the Client's configured HTTP client and returns the response.",
 			Handler:     "BlockingRequestHandler", RequestType: "BlockingRequestData",
 		},
 		{
 			Path: "/wrappers/nonblocking_request", Methods: []string{"POST"}, Versioned: true, Tag: "wrappers",
 			Summary:     "Proxy a non-blocking HTTP request",
-			Description: "Schedules an arbitrary HTTP request to the BlenderKit server; the response is reported back through /report tasks.",
+			Description: "Schedules an arbitrary HTTP request to the Blendkit server; the response is reported back through /report tasks.",
 			Handler:     "NonblockingRequestHandler", RequestType: "NonblockingRequestTaskData",
 		},
 
@@ -282,11 +323,51 @@ func Routes() []Route {
 			Description: "Polling endpoint for the Godot add-on. Subscribes the app on first call and returns a SoftwareResponse with the Client version, a connection message and pending tasks.",
 			Handler:     "godotReportHandler", RequestType: "Software",
 		},
+
+		// DEPRECATED - app-prefixed aliases kept for backward compatibility with
+		// existing add-ons. New code should use the universal endpoints above.
 		{
-			Path: "/godot/unsubscribe_addon", Methods: []string{"POST"}, Versioned: true, Tag: "godot",
-			Summary:     "Unsubscribe the Godot add-on",
-			Description: "Cancels all running tasks for the Godot app and removes it from the Client's task registry.",
-			Handler:     "godotUnsubscribeAddonHandler", RequestType: "ReportData",
+			Path: "/blender/asset_search", Methods: []string{"POST"}, Versioned: true, Tag: "deprecated",
+			Summary:     "Search assets (deprecated)",
+			Description: "Deprecated alias of /assets/search. Kept for backward compatibility with existing Blender add-ons.",
+			Handler:     "assetSearchHandler", RequestType: "SearchTaskData", Deprecated: true,
+		},
+		{
+			Path: "/blender/asset_download", Methods: []string{"POST"}, Versioned: true, Tag: "deprecated",
+			Summary:     "Download an asset (deprecated)",
+			Description: "Deprecated alias of /assets/download. Kept for backward compatibility with existing Blender add-ons.",
+			Handler:     "assetDownloadHandler", RequestType: "DownloadData", Deprecated: true,
+		},
+		{
+			Path: "/blender/asset_prxc_download", Methods: []string{"POST"}, Versioned: true, Tag: "deprecated",
+			Summary:     "Download a proxy collection asset (deprecated)",
+			Description: "Deprecated alias of /assets/download_prxc. Kept for backward compatibility with existing Blender add-ons.",
+			Handler:     "assetPrxcDownloadHandler", RequestType: "DownloadPrxcData",
+			RequestNote: "Body embeds DownloadPrxcData plus an app_id field.", Deprecated: true,
+		},
+		{
+			Path: "/blender/asset_upload", Methods: []string{"POST"}, Versioned: true, Tag: "deprecated",
+			Summary:     "Upload an asset (deprecated)",
+			Description: "Deprecated alias of /assets/upload. Kept for backward compatibility with existing Blender add-ons.",
+			Handler:     "assetUploadHandler", RequestType: "AssetUploadRequestData", RequiresAPIKey: true, Deprecated: true,
+		},
+		{
+			Path: "/blender/cancel_download", Methods: []string{"POST"}, Versioned: true, Tag: "deprecated",
+			Summary:     "Cancel a download (deprecated)",
+			Description: "Deprecated alias of /assets/cancel_download. Kept for backward compatibility with existing Blender add-ons.",
+			Handler:     "CancelDownloadHandler", RequestType: "CancelDownloadData", Deprecated: true,
+		},
+		{
+			Path: "/blender/unsubscribe_addon", Methods: []string{"POST"}, Versioned: true, Tag: "deprecated",
+			Summary:     "Unsubscribe a Blender add-on (deprecated)",
+			Description: "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Blender add-ons.",
+			Handler:     "blenderUnsubscribeAddonHandler", RequestType: "ReportData", Deprecated: true,
+		},
+		{
+			Path: "/godot/unsubscribe_addon", Methods: []string{"POST"}, Versioned: true, Tag: "deprecated",
+			Summary:     "Unsubscribe the Godot add-on (deprecated)",
+			Description: "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Godot add-ons.",
+			Handler:     "godotUnsubscribeAddonHandler", RequestType: "ReportData", Deprecated: true,
 		},
 	}
 }

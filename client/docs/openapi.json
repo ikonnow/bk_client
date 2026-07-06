@@ -1,10 +1,10 @@
 {
   "info": {
-    "description": "Local HTTP API exposed by the BlenderKit-Client (formerly daemon). The Client runs on localhost and bridges BlenderKit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the BlenderKit web service.\n\nMost endpoints are registered twice: once under the bare path (e.g. `/report`) and once under the versioned prefix (e.g. `/v1.10/report`). Both are equivalent.\n\nThis document is generated from the Go route registry in `internal/apispec` by `cmd/apidocgen`. Do not edit it by hand.",
+    "description": "Local HTTP API exposed by the Blendkit-Client (formerly daemon). The Client runs on localhost and bridges Blendkit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the Blendkit web service.\n\nMost endpoints are registered twice: once under the bare path (e.g. `/report`) and once under the versioned prefix (e.g. `/v1.10/report`). Both are equivalent.\n\nThis document is generated from the Go route registry in `internal/apispec` by `cmd/apidocgen`. Do not edit it by hand.",
     "license": {
       "name": "GPL-2.0-or-later"
     },
-    "title": "BlenderKit-Client API",
+    "title": "Blendkit-Client API",
     "version": "1.10.0"
   },
   "openapi": "3.1.0",
@@ -28,6 +28,245 @@
         "tags": [
           "core"
         ]
+      }
+    },
+    "/addons/list": {
+      "get": {
+        "description": "Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.",
+        "operationId": "listAddonsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List subscribed add-ons",
+        "tags": [
+          "addons"
+        ]
+      },
+      "post": {
+        "description": "Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.",
+        "operationId": "listAddonsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List subscribed add-ons",
+        "tags": [
+          "addons"
+        ]
+      }
+    },
+    "/addons/unsubscribe": {
+      "post": {
+        "description": "Cancels all running tasks for the calling app and removes it from the Client's task registry. Host-agnostic: works for any subscribed software (Blender, Godot, embedders).",
+        "operationId": "unsubscribeAddonHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `ReportData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "ReportData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Unsubscribe an add-on",
+        "tags": [
+          "addons"
+        ]
+      }
+    },
+    "/assets/cancel_download": {
+      "post": {
+        "description": "Cancels an in-progress asset download task.",
+        "operationId": "CancelDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `CancelDownloadData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "CancelDownloadData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Cancel a download",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/assets/download": {
+      "post": {
+        "description": "Starts an asynchronous asset download. Progress and result are reported back through /report tasks.",
+        "operationId": "assetDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `DownloadData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "DownloadData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Download an asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/assets/download_prxc": {
+      "post": {
+        "description": "Starts an asynchronous download of a proxy collection (prxc) asset.\n\nBody embeds DownloadPrxcData plus an app_id field.",
+        "operationId": "assetPrxcDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `DownloadPrxcData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "DownloadPrxcData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Download a proxy collection asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/assets/search": {
+      "post": {
+        "description": "Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.",
+        "operationId": "assetSearchHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SearchTaskData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SearchTaskData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Search assets",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/assets/upload": {
+      "post": {
+        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in Blendkit API key.",
+        "operationId": "assetUploadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `AssetUploadRequestData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "AssetUploadRequestData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Upload an asset",
+        "tags": [
+          "assets"
+        ],
+        "x-requires-api-key": true
       }
     },
     "/bkclientjs/get_asset": {
@@ -86,7 +325,8 @@
     },
     "/blender/asset_download": {
       "post": {
-        "description": "Starts an asynchronous asset download. Progress and result are reported back through /report tasks.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/download. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "assetDownloadHandler",
         "requestBody": {
           "content": {
@@ -111,15 +351,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Download an asset",
+        "summary": "Download an asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/blender/asset_prxc_download": {
       "post": {
-        "description": "Starts an asynchronous download of a proxy collection (prxc) asset.\n\nBody embeds DownloadPrxcData plus an app_id field.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/download_prxc. Kept for backward compatibility with existing Blender add-ons.\n\nBody embeds DownloadPrxcData plus an app_id field.",
         "operationId": "assetPrxcDownloadHandler",
         "requestBody": {
           "content": {
@@ -144,15 +385,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Download a proxy collection asset",
+        "summary": "Download a proxy collection asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/blender/asset_search": {
       "post": {
-        "description": "Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/search. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "assetSearchHandler",
         "requestBody": {
           "content": {
@@ -177,15 +419,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Search assets",
+        "summary": "Search assets (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/blender/asset_upload": {
       "post": {
-        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in BlenderKit API key.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/upload. Kept for backward compatibility with existing Blender add-ons.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "assetUploadHandler",
         "requestBody": {
           "content": {
@@ -210,16 +453,17 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Upload an asset",
+        "summary": "Upload an asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ],
         "x-requires-api-key": true
       }
     },
     "/blender/cancel_download": {
       "post": {
-        "description": "Cancels an in-progress asset download task.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/cancel_download. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "CancelDownloadHandler",
         "requestBody": {
           "content": {
@@ -244,15 +488,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Cancel a download",
+        "summary": "Cancel a download (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/blender/unsubscribe_addon": {
       "post": {
-        "description": "Cancels all running tasks for the app and removes it from the Client's task registry.",
+        "deprecated": true,
+        "description": "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "blenderUnsubscribeAddonHandler",
         "requestBody": {
           "content": {
@@ -277,15 +522,15 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Unsubscribe a Blender add-on",
+        "summary": "Unsubscribe a Blender add-on (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/comments/create_comment": {
       "post": {
-        "description": "Posts a new comment (or reply) on an asset.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Posts a new comment (or reply) on an asset.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "CreateCommentHandler",
         "requestBody": {
           "content": {
@@ -319,7 +564,7 @@
     },
     "/comments/feedback_comment": {
       "post": {
-        "description": "Sends feedback (like or dislike) on a comment.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Sends feedback (like or dislike) on a comment.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "FeedbackCommentHandler",
         "requestBody": {
           "content": {
@@ -386,7 +631,7 @@
     },
     "/comments/mark_comment_private": {
       "post": {
-        "description": "Marks a comment as private or public.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Marks a comment as private or public.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "MarkCommentPrivateHandler",
         "requestBody": {
           "content": {
@@ -420,7 +665,7 @@
     },
     "/consumer/exchange/": {
       "get": {
-        "description": "Browser redirect target after the user logs in on blenderkit.com. Validates the OAuth2 code and state query parameters, exchanges the code for tokens and redirects the browser to the server's oauth-landing page. Intentionally unversioned to keep the server-side redirect URL simple.\n\nQuery parameters: code (authorization code), state (CSRF/session state).",
+        "description": "Browser redirect target after the user logs in on blendkit.com. Validates the OAuth2 code and state query parameters, exchanges the code for tokens and redirects the browser to the server's oauth-landing page. Intentionally unversioned to keep the server-side redirect URL simple.\n\nQuery parameters: code (authorization code), state (CSRF/session state).",
         "operationId": "consumerExchangeHandler",
         "responses": {
           "200": {
@@ -455,6 +700,27 @@
           }
         },
         "summary": "Network/debug diagnostics",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/dev": {
+      "get": {
+        "description": "Serves a self-contained, same-origin HTML page with buttons to call the Client's endpoints and view their raw JSON responses. Because it is served by the Client itself, requests are same-origin and the settings endpoints (which emit no CORS headers) work directly from the browser. Manual-testing aid, not a production UI.",
+        "operationId": "devDashboardHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Developer test dashboard",
         "tags": [
           "core"
         ]
@@ -495,7 +761,8 @@
     },
     "/godot/unsubscribe_addon": {
       "post": {
-        "description": "Cancels all running tasks for the Godot app and removes it from the Client's task registry.",
+        "deprecated": true,
+        "description": "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Godot add-ons.",
         "operationId": "godotUnsubscribeAddonHandler",
         "requestBody": {
           "content": {
@@ -520,15 +787,15 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Unsubscribe the Godot add-on",
+        "summary": "Unsubscribe the Godot add-on (deprecated)",
         "tags": [
-          "godot"
+          "deprecated"
         ]
       }
     },
     "/notifications/mark_notification_read": {
       "post": {
-        "description": "Marks a server notification as read.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Marks a server notification as read.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "MarkNotificationReadHandler",
         "requestBody": {
           "content": {
@@ -562,7 +829,7 @@
     },
     "/oauth2/logout": {
       "post": {
-        "description": "Revokes the API key and refresh token on the server and logs the user out of all connected apps.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Revokes the API key and refresh token on the server and logs the user out of all connected apps.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "OAuth2LogoutHandler",
         "requestBody": {
           "content": {
@@ -662,7 +929,7 @@
     },
     "/profiles/get_user_profile": {
       "post": {
-        "description": "Fetches the logged-in user's BlenderKit profile.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the logged-in user's Blendkit profile.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetUserProfileHandler",
         "requestBody": {
           "content": {
@@ -696,7 +963,7 @@
     },
     "/ratings/get_bookmarks": {
       "post": {
-        "description": "Fetches the user's bookmarked assets.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the user's bookmarked assets.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetBookmarksHandler",
         "requestBody": {
           "content": {
@@ -730,7 +997,7 @@
     },
     "/ratings/get_rating": {
       "post": {
-        "description": "Fetches the user's ratings for an asset.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the user's ratings for an asset.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetRatingHandler",
         "requestBody": {
           "content": {
@@ -764,7 +1031,7 @@
     },
     "/ratings/send_rating": {
       "post": {
-        "description": "Submits a rating for an asset. Only POST is accepted.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Submits a rating for an asset. Only POST is accepted.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "SendRatingHandler",
         "requestBody": {
           "content": {
@@ -895,6 +1162,112 @@
         ]
       }
     },
+    "/settings/get": {
+      "get": {
+        "description": "Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.",
+        "operationId": "getSettingsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Client settings",
+        "tags": [
+          "settings"
+        ]
+      },
+      "post": {
+        "description": "Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.",
+        "operationId": "getSettingsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Client settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/settings/set": {
+      "post": {
+        "description": "Applies a change to the shared settings (only the fields present in the body are modified), bumps the revision and returns the new snapshot. The change is broadcast to every connected plugin on their next /report poll.",
+        "operationId": "setSettingsHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SetSettingsData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SetSettingsData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Change shared settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/settings/set_variable": {
+      "post": {
+        "description": "Stores a free-form variable/value pair on behalf of a plugin. An empty 'plugin' stores it globally (without plugin association); a non-empty 'plugin' namespaces it under that plugin name (e.g. blender -\u003e executable). Bumps the revision and returns the new snapshot; the change is broadcast on the next /report poll.",
+        "operationId": "setVariableHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SetVariableData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SetVariableData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Store a variable",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/shutdown": {
       "get": {
         "description": "Schedules a graceful exit of the Client process shortly after responding 200 OK.",
@@ -933,6 +1306,245 @@
         "tags": [
           "core"
         ]
+      }
+    },
+    "/v1.10/addons/list": {
+      "get": {
+        "description": "Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.",
+        "operationId": "listAddonsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List subscribed add-ons",
+        "tags": [
+          "addons"
+        ]
+      },
+      "post": {
+        "description": "Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.",
+        "operationId": "listAddonsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List subscribed add-ons",
+        "tags": [
+          "addons"
+        ]
+      }
+    },
+    "/v1.10/addons/unsubscribe": {
+      "post": {
+        "description": "Cancels all running tasks for the calling app and removes it from the Client's task registry. Host-agnostic: works for any subscribed software (Blender, Godot, embedders).",
+        "operationId": "unsubscribeAddonHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `ReportData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "ReportData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Unsubscribe an add-on",
+        "tags": [
+          "addons"
+        ]
+      }
+    },
+    "/v1.10/assets/cancel_download": {
+      "post": {
+        "description": "Cancels an in-progress asset download task.",
+        "operationId": "CancelDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `CancelDownloadData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "CancelDownloadData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Cancel a download",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/v1.10/assets/download": {
+      "post": {
+        "description": "Starts an asynchronous asset download. Progress and result are reported back through /report tasks.",
+        "operationId": "assetDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `DownloadData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "DownloadData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Download an asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/v1.10/assets/download_prxc": {
+      "post": {
+        "description": "Starts an asynchronous download of a proxy collection (prxc) asset.\n\nBody embeds DownloadPrxcData plus an app_id field.",
+        "operationId": "assetPrxcDownloadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `DownloadPrxcData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "DownloadPrxcData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Download a proxy collection asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/v1.10/assets/search": {
+      "post": {
+        "description": "Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.",
+        "operationId": "assetSearchHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SearchTaskData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SearchTaskData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Search assets",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/v1.10/assets/upload": {
+      "post": {
+        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in Blendkit API key.",
+        "operationId": "assetUploadHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `AssetUploadRequestData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "AssetUploadRequestData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Upload an asset",
+        "tags": [
+          "assets"
+        ],
+        "x-requires-api-key": true
       }
     },
     "/v1.10/bkclientjs/get_asset": {
@@ -991,7 +1603,8 @@
     },
     "/v1.10/blender/asset_download": {
       "post": {
-        "description": "Starts an asynchronous asset download. Progress and result are reported back through /report tasks.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/download. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "assetDownloadHandler",
         "requestBody": {
           "content": {
@@ -1016,15 +1629,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Download an asset",
+        "summary": "Download an asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/v1.10/blender/asset_prxc_download": {
       "post": {
-        "description": "Starts an asynchronous download of a proxy collection (prxc) asset.\n\nBody embeds DownloadPrxcData plus an app_id field.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/download_prxc. Kept for backward compatibility with existing Blender add-ons.\n\nBody embeds DownloadPrxcData plus an app_id field.",
         "operationId": "assetPrxcDownloadHandler",
         "requestBody": {
           "content": {
@@ -1049,15 +1663,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Download a proxy collection asset",
+        "summary": "Download a proxy collection asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/v1.10/blender/asset_search": {
       "post": {
-        "description": "Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/search. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "assetSearchHandler",
         "requestBody": {
           "content": {
@@ -1082,15 +1697,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Search assets",
+        "summary": "Search assets (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/v1.10/blender/asset_upload": {
       "post": {
-        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in BlenderKit API key.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/upload. Kept for backward compatibility with existing Blender add-ons.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "assetUploadHandler",
         "requestBody": {
           "content": {
@@ -1115,16 +1731,17 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Upload an asset",
+        "summary": "Upload an asset (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ],
         "x-requires-api-key": true
       }
     },
     "/v1.10/blender/cancel_download": {
       "post": {
-        "description": "Cancels an in-progress asset download task.",
+        "deprecated": true,
+        "description": "Deprecated alias of /assets/cancel_download. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "CancelDownloadHandler",
         "requestBody": {
           "content": {
@@ -1149,15 +1766,16 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Cancel a download",
+        "summary": "Cancel a download (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/v1.10/blender/unsubscribe_addon": {
       "post": {
-        "description": "Cancels all running tasks for the app and removes it from the Client's task registry.",
+        "deprecated": true,
+        "description": "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Blender add-ons.",
         "operationId": "blenderUnsubscribeAddonHandler",
         "requestBody": {
           "content": {
@@ -1182,15 +1800,15 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Unsubscribe a Blender add-on",
+        "summary": "Unsubscribe a Blender add-on (deprecated)",
         "tags": [
-          "blender"
+          "deprecated"
         ]
       }
     },
     "/v1.10/comments/create_comment": {
       "post": {
-        "description": "Posts a new comment (or reply) on an asset.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Posts a new comment (or reply) on an asset.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "CreateCommentHandler",
         "requestBody": {
           "content": {
@@ -1224,7 +1842,7 @@
     },
     "/v1.10/comments/feedback_comment": {
       "post": {
-        "description": "Sends feedback (like or dislike) on a comment.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Sends feedback (like or dislike) on a comment.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "FeedbackCommentHandler",
         "requestBody": {
           "content": {
@@ -1291,7 +1909,7 @@
     },
     "/v1.10/comments/mark_comment_private": {
       "post": {
-        "description": "Marks a comment as private or public.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Marks a comment as private or public.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "MarkCommentPrivateHandler",
         "requestBody": {
           "content": {
@@ -1344,6 +1962,27 @@
         ]
       }
     },
+    "/v1.10/dev": {
+      "get": {
+        "description": "Serves a self-contained, same-origin HTML page with buttons to call the Client's endpoints and view their raw JSON responses. Because it is served by the Client itself, requests are same-origin and the settings endpoints (which emit no CORS headers) work directly from the browser. Manual-testing aid, not a production UI.",
+        "operationId": "devDashboardHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Developer test dashboard",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/v1.10/godot/report": {
       "post": {
         "description": "Polling endpoint for the Godot add-on. Subscribes the app on first call and returns a SoftwareResponse with the Client version, a connection message and pending tasks.",
@@ -1379,7 +2018,8 @@
     },
     "/v1.10/godot/unsubscribe_addon": {
       "post": {
-        "description": "Cancels all running tasks for the Godot app and removes it from the Client's task registry.",
+        "deprecated": true,
+        "description": "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Godot add-ons.",
         "operationId": "godotUnsubscribeAddonHandler",
         "requestBody": {
           "content": {
@@ -1404,15 +2044,15 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Unsubscribe the Godot add-on",
+        "summary": "Unsubscribe the Godot add-on (deprecated)",
         "tags": [
-          "godot"
+          "deprecated"
         ]
       }
     },
     "/v1.10/notifications/mark_notification_read": {
       "post": {
-        "description": "Marks a server notification as read.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Marks a server notification as read.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "MarkNotificationReadHandler",
         "requestBody": {
           "content": {
@@ -1446,7 +2086,7 @@
     },
     "/v1.10/oauth2/logout": {
       "post": {
-        "description": "Revokes the API key and refresh token on the server and logs the user out of all connected apps.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Revokes the API key and refresh token on the server and logs the user out of all connected apps.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "OAuth2LogoutHandler",
         "requestBody": {
           "content": {
@@ -1546,7 +2186,7 @@
     },
     "/v1.10/profiles/get_user_profile": {
       "post": {
-        "description": "Fetches the logged-in user's BlenderKit profile.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the logged-in user's Blendkit profile.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetUserProfileHandler",
         "requestBody": {
           "content": {
@@ -1580,7 +2220,7 @@
     },
     "/v1.10/ratings/get_bookmarks": {
       "post": {
-        "description": "Fetches the user's bookmarked assets.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the user's bookmarked assets.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetBookmarksHandler",
         "requestBody": {
           "content": {
@@ -1614,7 +2254,7 @@
     },
     "/v1.10/ratings/get_rating": {
       "post": {
-        "description": "Fetches the user's ratings for an asset.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the user's ratings for an asset.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetRatingHandler",
         "requestBody": {
           "content": {
@@ -1648,7 +2288,7 @@
     },
     "/v1.10/ratings/send_rating": {
       "post": {
-        "description": "Submits a rating for an asset. Only POST is accepted.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Submits a rating for an asset. Only POST is accepted.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "SendRatingHandler",
         "requestBody": {
           "content": {
@@ -1779,6 +2419,112 @@
         ]
       }
     },
+    "/v1.10/settings/get": {
+      "get": {
+        "description": "Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.",
+        "operationId": "getSettingsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Client settings",
+        "tags": [
+          "settings"
+        ]
+      },
+      "post": {
+        "description": "Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.",
+        "operationId": "getSettingsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Client settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/v1.10/settings/set": {
+      "post": {
+        "description": "Applies a change to the shared settings (only the fields present in the body are modified), bumps the revision and returns the new snapshot. The change is broadcast to every connected plugin on their next /report poll.",
+        "operationId": "setSettingsHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SetSettingsData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SetSettingsData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Change shared settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/v1.10/settings/set_variable": {
+      "post": {
+        "description": "Stores a free-form variable/value pair on behalf of a plugin. An empty 'plugin' stores it globally (without plugin association); a non-empty 'plugin' namespaces it under that plugin name (e.g. blender -\u003e executable). Bumps the revision and returns the new snapshot; the change is broadcast on the next /report poll.",
+        "operationId": "setVariableHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SetVariableData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SetVariableData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Store a variable",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/v1.10/shutdown": {
       "get": {
         "description": "Schedules a graceful exit of the Client process shortly after responding 200 OK.",
@@ -1854,7 +2600,7 @@
     },
     "/v1.10/wrappers/blocking_request": {
       "post": {
-        "description": "Blocking helper that performs an arbitrary HTTP request to the BlenderKit server through the Client's configured HTTP client and returns the response.",
+        "description": "Blocking helper that performs an arbitrary HTTP request to the Blendkit server through the Client's configured HTTP client and returns the response.",
         "operationId": "BlockingRequestHandler",
         "requestBody": {
           "content": {
@@ -1887,7 +2633,7 @@
     },
     "/v1.10/wrappers/complete_upload_file_blocking": {
       "post": {
-        "description": "Blocking helper that completes a multi-part file upload.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Blocking helper that completes a multi-part file upload.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "CompleteUploadFileBlocking",
         "requestBody": {
           "content": {
@@ -1954,7 +2700,7 @@
     },
     "/v1.10/wrappers/nonblocking_request": {
       "post": {
-        "description": "Schedules an arbitrary HTTP request to the BlenderKit server; the response is reported back through /report tasks.",
+        "description": "Schedules an arbitrary HTTP request to the Blendkit server; the response is reported back through /report tasks.",
         "operationId": "NonblockingRequestHandler",
         "requestBody": {
           "content": {
@@ -2020,7 +2766,7 @@
     },
     "/wrappers/blocking_request": {
       "post": {
-        "description": "Blocking helper that performs an arbitrary HTTP request to the BlenderKit server through the Client's configured HTTP client and returns the response.",
+        "description": "Blocking helper that performs an arbitrary HTTP request to the Blendkit server through the Client's configured HTTP client and returns the response.",
         "operationId": "BlockingRequestHandler",
         "requestBody": {
           "content": {
@@ -2053,7 +2799,7 @@
     },
     "/wrappers/complete_upload_file_blocking": {
       "post": {
-        "description": "Blocking helper that completes a multi-part file upload.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Blocking helper that completes a multi-part file upload.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "CompleteUploadFileBlocking",
         "requestBody": {
           "content": {
@@ -2120,7 +2866,7 @@
     },
     "/wrappers/nonblocking_request": {
       "post": {
-        "description": "Schedules an arbitrary HTTP request to the BlenderKit server; the response is reported back through /report tasks.",
+        "description": "Schedules an arbitrary HTTP request to the Blendkit server; the response is reported back through /report tasks.",
         "operationId": "NonblockingRequestHandler",
         "requestBody": {
           "content": {
@@ -2154,7 +2900,7 @@
   },
   "servers": [
     {
-      "description": "Local BlenderKit-Client. Default port is 62485.",
+      "description": "Local Blendkit-Client. Default port is 62485.",
       "url": "http://localhost:{port}",
       "variables": {
         "port": {
@@ -2168,10 +2914,16 @@
       "name": "core"
     },
     {
+      "name": "settings"
+    },
+    {
       "name": "login"
     },
     {
-      "name": "blender"
+      "name": "assets"
+    },
+    {
+      "name": "addons"
     },
     {
       "name": "host-agnostic"
@@ -2196,6 +2948,9 @@
     },
     {
       "name": "godot"
+    },
+    {
+      "name": "deprecated"
     }
   ]
 }

@@ -35,6 +35,10 @@ import (
 // Handler for the index of the Client.
 // In future we can add here links to /debug or other useful endpoints.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/favicon.ico" { // Browsers request this automatically; answer quietly without warning.
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if r.URL.Path != "/" { // Go handles "/" path as catchall, so refusing non-index stuff here
 		BKLog.Printf("%v Access to unknown path: %v", EmoWarning, r.URL.Path)
 		http.Error(w, "Not found: "+r.URL.Path, http.StatusNotFound)
@@ -189,10 +193,11 @@ var proxyOptions = []string{
 var TimeoutCoefficient = []int{1, 10}
 
 var testURLs = []string{
+	"https://www.blendkit.com/-/alive/",
+	"https://www.blendkit.com/api/v1/search-status/",
 	"https://www.blendkit.com/api/v1/search/?query=kitten",
 	"https://api.blendkit.com/api/v1/search/?query=kitten",
 	"https://public.blendkit.com/robots.txt",
-	"https://status.blendkit.com/",
 	"https://www.blendkit.com/disclaimer/",
 }
 

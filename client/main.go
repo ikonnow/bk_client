@@ -40,6 +40,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/blenderkit/blenderkit/client/internal/settings"
 	"github.com/google/uuid"
 	"github.com/gookit/color"
 )
@@ -278,7 +279,7 @@ func main() {
 	// behaviour.
 	standalone := *StartingAddonVersion == ""
 
-	// Allow BLENDERKIT_SERVER to set the server when --server was not passed
+	// Allow BLENDKIT_SERVER to set the server when --server was not passed
 	// explicitly. An add-on always passes --server, so this only affects manual
 	// standalone/dev runs and never overrides an add-on-spawned Client.
 	serverSetByFlag := false
@@ -288,7 +289,7 @@ func main() {
 		}
 	})
 	if !serverSetByFlag {
-		if envServer := os.Getenv("BLENDERKIT_SERVER"); envServer != "" {
+		if envServer := os.Getenv("BLENDKIT_SERVER"); envServer != "" {
 			*Server = envServer
 		}
 	}
@@ -319,6 +320,20 @@ func main() {
 	}
 
 	CreateHTTPClients(*proxy_address, *proxy_which, *ssl_context, *trusted_ca_certs)
+
+	// Initialize the Client-owned settings store. The Client is the source of
+	// truth for settings shared with plugins; settings are scoped to this Client
+	// version and a new version inherits from the most recent previous one. The
+	// shared server is seeded from the resolved startup server.
+	if settingsPath, err := settings.Path(); err != nil {
+		BKLog.Printf("%v Could not resolve settings path: %v", EmoWarning, err)
+	} else if store, err := settings.Open(settingsPath, ClientVersion, settings.Shared{Server: *Server}); err != nil {
+		BKLog.Printf("%v Could not open settings store: %v", EmoWarning, err)
+	} else {
+		SettingsStore = store
+		BKLog.Printf("%s Settings store ready (v%s, rev %d): %s", EmoOK, ClientVersion, store.Snapshot().Revision, settingsPath)
+	}
+
 	// Standalone Clients are persistent, so the inactivity auto-shutdown (used
 	// when an add-on spawns the Client) is skipped.
 	if !standalone {
@@ -340,6 +355,18 @@ func main() {
 	mux.HandleFunc("/debug", DebugNetworkHandler)
 	mux.HandleFunc("/"+vapi+"/debug", DebugNetworkHandler)
 
+	// DEV DASHBOARD - same-origin HTML page for manual endpoint testing.
+	mux.HandleFunc("/dev", devDashboardHandler)
+	mux.HandleFunc("/"+vapi+"/dev", devDashboardHandler)
+
+	// SETTINGS - Client is the source of truth; plugins sync from here.
+	mux.HandleFunc("/settings/get", getSettingsHandler)
+	mux.HandleFunc("/"+vapi+"/settings/get", getSettingsHandler)
+	mux.HandleFunc("/settings/set", setSettingsHandler)
+	mux.HandleFunc("/"+vapi+"/settings/set", setSettingsHandler)
+	mux.HandleFunc("/settings/set_variable", setVariableHandler)
+	mux.HandleFunc("/"+vapi+"/settings/set_variable", setVariableHandler)
+
 	// LOGIN
 	mux.HandleFunc("/consumer/exchange/", consumerExchangeHandler) // does not use /vX.Y/ to keep stuff simple on server side
 	mux.HandleFunc("/refresh_token", RefreshTokenHandler)
@@ -349,19 +376,24 @@ func main() {
 	mux.HandleFunc("/oauth2/logout", OAuth2LogoutHandler)
 	mux.HandleFunc("/"+vapi+"/oauth2/logout", OAuth2LogoutHandler)
 
-	// BLENDER SPECIFIC HANDLERS
-	mux.HandleFunc("/blender/unsubscribe_addon", blenderUnsubscribeAddonHandler)
-	mux.HandleFunc("/"+vapi+"/blender/unsubscribe_addon", blenderUnsubscribeAddonHandler)
-	mux.HandleFunc("/blender/cancel_download", CancelDownloadHandler)
-	mux.HandleFunc("/"+vapi+"/blender/cancel_download", CancelDownloadHandler)
-	mux.HandleFunc("/blender/asset_download", assetDownloadHandler)
-	mux.HandleFunc("/"+vapi+"/blender/asset_download", assetDownloadHandler)
-	mux.HandleFunc("/blender/asset_prxc_download", assetPrxcDownloadHandler)
-	mux.HandleFunc("/"+vapi+"/blender/asset_prxc_download", assetPrxcDownloadHandler)
-	mux.HandleFunc("/blender/asset_search", assetSearchHandler)
-	mux.HandleFunc("/"+vapi+"/blender/asset_search", assetSearchHandler)
-	mux.HandleFunc("/blender/asset_upload", assetUploadHandler)
-	mux.HandleFunc("/"+vapi+"/blender/asset_upload", assetUploadHandler)
+	// UNIVERSAL ASSET & ADD-ON ENDPOINTS - host-agnostic; any plugin (Blender,
+	// Godot, embedders) can call these. These are the preferred endpoints; the
+	// app-prefixed aliases in the DEPRECATED section below are kept only for
+	// backward compatibility.
+	mux.HandleFunc("/assets/search", assetSearchHandler)
+	mux.HandleFunc("/"+vapi+"/assets/search", assetSearchHandler)
+	mux.HandleFunc("/assets/download", assetDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/assets/download", assetDownloadHandler)
+	mux.HandleFunc("/assets/download_prxc", assetPrxcDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/assets/download_prxc", assetPrxcDownloadHandler)
+	mux.HandleFunc("/assets/upload", assetUploadHandler)
+	mux.HandleFunc("/"+vapi+"/assets/upload", assetUploadHandler)
+	mux.HandleFunc("/assets/cancel_download", CancelDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/assets/cancel_download", CancelDownloadHandler)
+	mux.HandleFunc("/addons/unsubscribe", unsubscribeAddonHandler)
+	mux.HandleFunc("/"+vapi+"/addons/unsubscribe", unsubscribeAddonHandler)
+	mux.HandleFunc("/addons/list", listAddonsHandler)
+	mux.HandleFunc("/"+vapi+"/addons/list", listAddonsHandler)
 
 	// HOST-AGNOSTIC: run a Python recipe under headless Blender.
 	// Used by external embedders (e.g. the Rhino plug-in) and
@@ -415,6 +447,28 @@ func main() {
 	// OTHER SOFTWARES
 	mux.HandleFunc("/godot/report", godotReportHandler)
 	mux.HandleFunc("/"+vapi+"/godot/report", godotReportHandler)
+
+	// DEPRECATED - app-prefixed aliases kept for backward compatibility with
+	// existing add-ons. New code should use the universal endpoints above:
+	//   /blender/asset_search       -> /assets/search
+	//   /blender/asset_download     -> /assets/download
+	//   /blender/asset_prxc_download-> /assets/download_prxc
+	//   /blender/asset_upload       -> /assets/upload
+	//   /blender/cancel_download    -> /assets/cancel_download
+	//   /blender/unsubscribe_addon  -> /addons/unsubscribe
+	//   /godot/unsubscribe_addon    -> /addons/unsubscribe
+	mux.HandleFunc("/blender/asset_search", assetSearchHandler)
+	mux.HandleFunc("/"+vapi+"/blender/asset_search", assetSearchHandler)
+	mux.HandleFunc("/blender/asset_download", assetDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/blender/asset_download", assetDownloadHandler)
+	mux.HandleFunc("/blender/asset_prxc_download", assetPrxcDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/blender/asset_prxc_download", assetPrxcDownloadHandler)
+	mux.HandleFunc("/blender/asset_upload", assetUploadHandler)
+	mux.HandleFunc("/"+vapi+"/blender/asset_upload", assetUploadHandler)
+	mux.HandleFunc("/blender/cancel_download", CancelDownloadHandler)
+	mux.HandleFunc("/"+vapi+"/blender/cancel_download", CancelDownloadHandler)
+	mux.HandleFunc("/blender/unsubscribe_addon", blenderUnsubscribeAddonHandler)
+	mux.HandleFunc("/"+vapi+"/blender/unsubscribe_addon", blenderUnsubscribeAddonHandler)
 	mux.HandleFunc("/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 	mux.HandleFunc("/"+vapi+"/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 
@@ -584,6 +638,18 @@ func reportHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	TasksMux.Unlock()
 
+	// Broadcast the Client-owned settings on every report so plugins always
+	// converge to the source of truth: even if a poll is missed, the next one
+	// reconciles. Plugins apply whenever the revision grows. Sent as a task to
+	// keep the response an array (backward compatible with existing add-ons).
+	if SettingsStore != nil {
+		snap := SettingsStore.Snapshot()
+		settingsTask := NewTask(nil, data.AppID, uuid.New().String(), "settings")
+		settingsTask.Result = snap
+		settingsTask.Finish("Client settings")
+		toReport = append(toReport, settingsTask)
+	}
+
 	responseJSON, err := json.Marshal(toReport)
 	if err != nil {
 		http.Error(w, "Error converting to JSON: "+err.Error(), http.StatusInternalServerError)
@@ -703,6 +769,28 @@ func godotUnsubscribeAddonHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	unsubscribeAddon(data.AppID, "Godot")
+	w.WriteHeader(http.StatusOK)
+}
+
+// unsubscribeAddonHandler is the universal, host-agnostic unsubscribe endpoint.
+// Any plugin (Blender, Godot, embedders) can call it; the software name is
+// resolved from the subscribed-software registry purely for logging.
+func unsubscribeAddonHandler(w http.ResponseWriter, r *http.Request) {
+	var data ReportData
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		http.Error(w, "Error parsing JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	name := "add-on"
+	AvailableSoftwaresMux.Lock()
+	if sw, ok := AvailableSoftwares[data.AppID]; ok && sw.Name != "" {
+		name = sw.Name
+	}
+	AvailableSoftwaresMux.Unlock()
+
+	unsubscribeAddon(data.AppID, name)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -3142,6 +3230,27 @@ func bkclientjsStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonBytes)
+}
+
+// listAddonsHandler is the universal, host-agnostic endpoint that lists all
+// currently subscribed softwares/plugins. Unlike /bkclientjs/status (which is
+// CORS-gated for browser callers and therefore rejects requests without an
+// allowed Origin), this endpoint is meant for local/plugin use and applies no
+// origin gating. It returns the same ClientStatus payload.
+func listAddonsHandler(w http.ResponseWriter, r *http.Request) {
+	data := ClientStatus{
+		ClientVersion: ClientVersion,
+		Softwares:     GetAvailableSoftwares(),
+	}
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonBytes)
 }

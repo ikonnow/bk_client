@@ -18,21 +18,21 @@
 
 ##### END GPL LICENSE BLOCK #####*/
 
-// Live integration tests that hit a real BlenderKit server.
+// Live integration tests that hit a real Blendkit server.
 //
 // These are gated behind the "live" build tag so they never run in normal
 // `go test ./...` or CI. Run them explicitly against the devel server with a
 // dedicated test account's key:
 //
 //	# PowerShell
-//	$env:BLENDERKIT_API_KEY="..."; $env:BLENDERKIT_SERVER="https://devel.blenderkit.com"
+//	$env:BLENDKIT_API_KEY="..."; $env:BLENDKIT_SERVER="https://devel.blendkit.com"
 //	go test -tags=live -run TestLive ./...
 //
 //	# bash
-//	BLENDERKIT_API_KEY=... BLENDERKIT_SERVER=https://devel.blenderkit.com \
+//	BLENDKIT_API_KEY=... BLENDKIT_SERVER=https://devel.blendkit.com \
 //	  go test -tags=live -run TestLive ./...
 //
-// When BLENDERKIT_API_KEY is unset the auth-requiring tests skip themselves, so
+// When BLENDKIT_API_KEY is unset the auth-requiring tests skip themselves, so
 // the suite is safe to invoke without credentials.
 
 package main
@@ -49,18 +49,18 @@ import (
 // liveServer returns the server to test against, defaulting to the devel server
 // so live tests never accidentally hit production.
 func liveServer() string {
-	if s := os.Getenv("BLENDERKIT_SERVER"); s != "" {
+	if s := os.Getenv("BLENDKIT_SERVER"); s != "" {
 		return s
 	}
-	return "https://devel.blenderkit.com"
+	return "https://devel.blendkit.com"
 }
 
 // liveAPIKey returns the test API key, or skips the test when it is not set.
 func liveAPIKey(t *testing.T) string {
 	t.Helper()
-	key := os.Getenv("BLENDERKIT_API_KEY")
+	key := os.Getenv("BLENDKIT_API_KEY")
 	if key == "" {
-		t.Skip("set BLENDERKIT_API_KEY (and optionally BLENDERKIT_SERVER) to run live tests")
+		t.Skip("set BLENDKIT_API_KEY (and optionally BLENDKIT_SERVER) to run live tests")
 	}
 	return key
 }
@@ -74,8 +74,8 @@ func liveHTTPClient() *http.Client {
 // TestLiveSearchPublic verifies the public search endpoint responds without
 // authentication. This catches gross connectivity/server-shape regressions.
 func TestLiveSearchPublic(t *testing.T) {
-	if os.Getenv("BLENDERKIT_LIVE") == "" && os.Getenv("BLENDERKIT_API_KEY") == "" {
-		t.Skip("set BLENDERKIT_LIVE=1 or BLENDERKIT_API_KEY to run live tests")
+	if os.Getenv("BLENDKIT_LIVE") == "" && os.Getenv("BLENDKIT_API_KEY") == "" {
+		t.Skip("set BLENDKIT_LIVE=1 or BLENDKIT_API_KEY to run live tests")
 	}
 
 	url := liveServer() + "/api/v1/search/?query=test&page_size=1"
@@ -124,7 +124,7 @@ func TestLiveGetUserProfile(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		t.Fatalf("/me/ returned %s (is BLENDERKIT_API_KEY valid for %s?): %s", resp.Status, liveServer(), body)
+		t.Fatalf("/me/ returned %s (is BLENDKIT_API_KEY valid for %s?): %s", resp.Status, liveServer(), body)
 	}
 
 	var profile struct {

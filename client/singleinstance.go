@@ -85,7 +85,7 @@ func ensureSingleInstance() {
 		return
 	}
 	if !locked {
-		BKLog.Printf("%s BlenderKit-Client %s is already running — exiting this duplicate instance.", EmoOK, runningInstanceInfo())
+		BKLog.Printf("%s Blendkit-Client %s is already running — exiting this duplicate instance.", EmoOK, runningInstanceInfo())
 		os.Exit(0)
 	}
 
