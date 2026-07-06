@@ -53,6 +53,7 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 
 | Method | Path | Versioned | Auth | Summary | Request body |
 |---|---|:---:|:---:|---|---|
+| GET, POST | `/addons/list` | ✓ |  | List subscribed add-ons | — |
 | POST | `/addons/unsubscribe` | ✓ |  | Unsubscribe an add-on | `ReportData` |
 
 ### host-agnostic
@@ -269,6 +270,13 @@ Cancels an in-progress asset download task.
 - **Request body:** JSON `CancelDownloadData` (Go struct in package main)
 
 ### addons
+
+#### `GET / POST /addons/list`
+
+Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.
+
+- **Handler:** `listAddonsHandler`
+- **Versioned alias:** `/v1.10/addons/list`
 
 #### `POST /addons/unsubscribe`
 

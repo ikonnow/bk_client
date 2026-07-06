@@ -30,6 +30,46 @@
         ]
       }
     },
+    "/addons/list": {
+      "get": {
+        "description": "Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.",
+        "operationId": "listAddonsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List subscribed add-ons",
+        "tags": [
+          "addons"
+        ]
+      },
+      "post": {
+        "description": "Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.",
+        "operationId": "listAddonsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List subscribed add-ons",
+        "tags": [
+          "addons"
+        ]
+      }
+    },
     "/addons/unsubscribe": {
       "post": {
         "description": "Cancels all running tasks for the calling app and removes it from the Client's task registry. Host-agnostic: works for any subscribed software (Blender, Godot, embedders).",
@@ -1265,6 +1305,46 @@
         "summary": "Shut down the Client",
         "tags": [
           "core"
+        ]
+      }
+    },
+    "/v1.10/addons/list": {
+      "get": {
+        "description": "Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.",
+        "operationId": "listAddonsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List subscribed add-ons",
+        "tags": [
+          "addons"
+        ]
+      },
+      "post": {
+        "description": "Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.",
+        "operationId": "listAddonsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List subscribed add-ons",
+        "tags": [
+          "addons"
         ]
       }
     },

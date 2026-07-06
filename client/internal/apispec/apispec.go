@@ -182,6 +182,12 @@ func Routes() []Route {
 
 		// ADD-ONS - universal add-on lifecycle.
 		{
+			Path: "/addons/list", Methods: []string{"GET", "POST"}, Versioned: true, Tag: "addons",
+			Summary:     "List subscribed add-ons",
+			Description: "Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.",
+			Handler:     "listAddonsHandler",
+		},
+		{
 			Path: "/addons/unsubscribe", Methods: []string{"POST"}, Versioned: true, Tag: "addons",
 			Summary:     "Unsubscribe an add-on",
 			Description: "Cancels all running tasks for the calling app and removes it from the Client's task registry. Host-agnostic: works for any subscribed software (Blender, Godot, embedders).",

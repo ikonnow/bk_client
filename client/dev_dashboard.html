@@ -65,7 +65,7 @@
 
   <div class="toolbar">
     <button id="runAll">Run all read-only (GET) requests</button>
-    <span class="muted">Runs <code>/</code>, <code>/debug</code>, <code>/settings/get</code>, <code>/bkclientjs/status</code></span>
+    <span class="muted">Runs <code>/</code>, <code>/debug</code>, <code>/settings/get</code>, <code>/addons/list</code></span>
   </div>
 
   <div id="cards"></div>
@@ -94,9 +94,11 @@ const REQUESTS = [
   { id: "report", method: "POST", path: "/report",
     desc: "Simulate a plugin poll: subscribes the app and returns its tasks (incl. the broadcast 'settings' task).",
     body: { app_id: 12345, api_key: "", addon_version: "3.13.0", blender_version: "4.2.2", platform_version: "dev-dashboard", project_name: "dev-dashboard" } },
-  { id: "status", method: "GET", path: "/bkclientjs/status", readonly: true,
-    desc: "List connected softwares (CORS-gated; same-origin here so it's allowed)." },
-  { id: "unsubscribe", method: "POST", path: "/blender/unsubscribe_addon",
+  { id: "list_addons", method: "GET", path: "/addons/list", readonly: true,
+    desc: "List subscribed softwares/plugins (host-agnostic, not CORS-gated)." },
+  { id: "status", method: "GET", path: "/bkclientjs/status", readonly: false,
+    desc: "Browser status endpoint (CORS-gated: needs an allowed Origin, so same-origin GET here returns 403)." },
+  { id: "unsubscribe", method: "POST", path: "/addons/unsubscribe",
     desc: "Unsubscribe the simulated add-on.",
     body: { app_id: 12345 } },
   { id: "shutdown", method: "POST", path: "/shutdown",

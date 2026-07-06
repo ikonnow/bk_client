@@ -392,6 +392,8 @@ func main() {
 	mux.HandleFunc("/"+vapi+"/assets/cancel_download", CancelDownloadHandler)
 	mux.HandleFunc("/addons/unsubscribe", unsubscribeAddonHandler)
 	mux.HandleFunc("/"+vapi+"/addons/unsubscribe", unsubscribeAddonHandler)
+	mux.HandleFunc("/addons/list", listAddonsHandler)
+	mux.HandleFunc("/"+vapi+"/addons/list", listAddonsHandler)
 
 	// HOST-AGNOSTIC: run a Python recipe under headless Blender.
 	// Used by external embedders (e.g. the Rhino plug-in) and
@@ -3228,6 +3230,27 @@ func bkclientjsStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonBytes)
+}
+
+// listAddonsHandler is the universal, host-agnostic endpoint that lists all
+// currently subscribed softwares/plugins. Unlike /bkclientjs/status (which is
+// CORS-gated for browser callers and therefore rejects requests without an
+// allowed Origin), this endpoint is meant for local/plugin use and applies no
+// origin gating. It returns the same ClientStatus payload.
+func listAddonsHandler(w http.ResponseWriter, r *http.Request) {
+	data := ClientStatus{
+		ClientVersion: ClientVersion,
+		Softwares:     GetAvailableSoftwares(),
+	}
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonBytes)
 }
