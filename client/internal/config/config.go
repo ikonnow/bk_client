@@ -48,7 +48,7 @@ const EnvConfigPath = "BLENDKIT_CLIENT_CONFIG"
 
 // FileName is the default configuration file name used when the config is
 // stored next to the executable.
-const FileName = "blenderkit-client-config.json"
+const FileName = "blendkit-client-config.json"
 
 // Default values mirror the Client's CLI flag defaults in main.go so that a
 // freshly written config reproduces the current out-of-the-box behaviour.

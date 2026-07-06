@@ -62,7 +62,7 @@ const EnvSettingsPath = "BLENDKIT_CLIENT_SETTINGS"
 
 // FileName is the default settings file name used when the settings are stored
 // next to the executable.
-const FileName = "blenderkit-client-settings.json"
+const FileName = "blendkit-client-settings.json"
 
 // Shared holds the typed, Client-wide settings every connected plugin must
 // mirror. Kept intentionally small in phase one.

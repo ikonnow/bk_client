@@ -14,9 +14,10 @@
     },
 
     "cSpell.words": [
-        "blenderkit",
         "bkclientjs",
         "bkit",
+        "blenderkit",
+        "blendkit",
         "gofmt",
         "ldflags",
         "pydoclint",

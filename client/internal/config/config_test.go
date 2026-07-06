@@ -147,7 +147,7 @@ func TestLoadInvalidJSON(t *testing.T) {
 }
 
 func TestDefaultPathFor(t *testing.T) {
-	got := DefaultPathFor(filepath.Join("some", "dir", "blenderkit-client"))
+	got := DefaultPathFor(filepath.Join("some", "dir", "blendkit-client"))
 	want := filepath.Join("some", "dir", FileName)
 	if got != want {
 		t.Errorf("DefaultPathFor() = %q, want %q", got, want)
