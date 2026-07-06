@@ -17,11 +17,11 @@
 # ##### END GPL LICENSE BLOCK #####
 # type: ignore
 
-"""Developer helper for the standalone BlenderKit-Client repository.
+"""Developer helper for the standalone Blendkit-Client repository.
 
 This script builds, verifies, tests and lints the Go Client and its bundled
 Python recipes (client/tools). It is intentionally self-contained: the parent
-add-on repositories (blenderkit_addon, bk_maya, blenderkit_rhino) keep their own
+add-on repositories (blendkit_addon, bk_maya, blendkit_rhino) keep their own
 dev.py for packaging the Client into their distributions.
 
 Commands:
@@ -48,7 +48,7 @@ TOOLS_DIR = os.path.join(CLIENT_DIR, "tools")
 # and its live tests understand. The .env file is gitignored and intended to hold
 # a *dedicated test account's* key pointed at the devel server.
 ENV_FILE = ".env"
-DEVEL_SERVER = "https://devel.blenderkit.com"
+DEVEL_SERVER = "https://devel.blendkit.com"
 
 
 def load_dotenv(path: str = ENV_FILE) -> dict:
@@ -82,7 +82,7 @@ def live_env() -> dict:
     """Build an environment for live testing/running from the local .env file.
 
     Reads the gitignored .env and exposes its key/server under the names the Go
-    code expects (BLENDERKIT_API_KEY, BLENDERKIT_SERVER), defaulting the server
+    code expects (BLENDKIT_API_KEY, BLENDKIT_SERVER), defaulting the server
     to the devel instance so live work never targets production by accident.
 
     Returns:
@@ -90,11 +90,11 @@ def live_env() -> dict:
     """
     dotenv = load_dotenv()
     env = {**os.environ}
-    api_key = dotenv.get("API_KEY") or dotenv.get("BLENDERKIT_API_KEY")
-    server = dotenv.get("BLENDERKIT_SERVER") or DEVEL_SERVER
+    api_key = dotenv.get("API_KEY") or dotenv.get("BLENDKIT_API_KEY")
+    server = dotenv.get("BLENDKIT_SERVER") or DEVEL_SERVER
     if api_key:
-        env["BLENDERKIT_API_KEY"] = api_key
-    env["BLENDERKIT_SERVER"] = server
+        env["BLENDKIT_API_KEY"] = api_key
+    env["BLENDKIT_SERVER"] = server
     return env
 
 
@@ -186,7 +186,7 @@ def build(args):
         )
         processes.append(((goos, goarch), proc))
 
-    print(f"BlenderKit-Client v{version} build started for {len(processes)} platforms.")
+    print(f"Blendkit-Client v{version} build started for {len(processes)} platforms.")
     builds_ok = True
     for target, proc in processes:
         proc.wait()
@@ -196,7 +196,7 @@ def build(args):
 
     if not builds_ok:
         sys.exit(1)
-    print(f"BlenderKit-Client v{version} builds completed in {out_dir}.")
+    print(f"Blendkit-Client v{version} builds completed in {out_dir}.")
 
 
 def run(args):
@@ -207,7 +207,7 @@ def run(args):
     Client runs in standalone mode: a system tray icon (Windows), a per-version
     single-instance guard, and no inactivity auto-shutdown.
 
-    The server is taken from .env (BLENDERKIT_SERVER) when set, so pointing the
+    The server is taken from .env (BLENDKIT_SERVER) when set, so pointing the
     Client at the devel server is just a matter of editing .env. Any arguments
     after ``--`` are forwarded to the Client, e.g. ``python dev.py run -- --port 62000``.
 
@@ -224,7 +224,7 @@ def run(args):
     # single-instance guard; replace it with the fresh dev build.
     _kill_existing_dev_clients(binary)
 
-    print(f"=== Building BlenderKit-Client v{version} for the current platform ===")
+    print(f"=== Building Blendkit-Client v{version} for the current platform ===")
     build_proc = subprocess.Popen(
         ["go", "build", "-o", binary, "-ldflags", ldflags, "."],
         cwd=CLIENT_DIR,
@@ -234,16 +234,16 @@ def run(args):
         sys.exit(1)
 
     # Expose the server (and key, for parity) from .env to the Client via the
-    # environment; the Client reads BLENDERKIT_SERVER when --server is not given.
+    # environment; the Client reads BLENDKIT_SERVER when --server is not given.
     env = {**os.environ}
     dotenv = load_dotenv()
-    server = dotenv.get("BLENDERKIT_SERVER")
+    server = dotenv.get("BLENDKIT_SERVER")
     if server:
-        env["BLENDERKIT_SERVER"] = server
+        env["BLENDKIT_SERVER"] = server
         print(f"=== Using server from .env: {server} ===")
-    api_key = dotenv.get("API_KEY") or dotenv.get("BLENDERKIT_API_KEY")
+    api_key = dotenv.get("API_KEY") or dotenv.get("BLENDKIT_API_KEY")
     if api_key:
-        env["BLENDERKIT_API_KEY"] = api_key
+        env["BLENDKIT_API_KEY"] = api_key
 
     print(f"=== Running {binary_path} (Ctrl+C to stop) ===")
     run_proc = subprocess.Popen([binary_path, *args.client_args], env=env)
@@ -256,19 +256,19 @@ def run(args):
 
 
 def live(args):
-    """Run the Go live integration tests against a real BlenderKit server.
+    """Run the Go live integration tests against a real Blendkit server.
 
-    Loads credentials from the gitignored .env (API_KEY / BLENDERKIT_SERVER),
-    exposes them as BLENDERKIT_API_KEY / BLENDERKIT_SERVER, and runs the
+    Loads credentials from the gitignored .env (API_KEY / BLENDKIT_SERVER),
+    exposes them as BLENDKIT_API_KEY / BLENDKIT_SERVER, and runs the
     ``live``-tagged tests. Tests that need a key skip themselves when none is set.
 
     Args:
         args: Parsed CLI arguments (unused).
     """
     env = live_env()
-    if "BLENDERKIT_API_KEY" not in env:
+    if "BLENDKIT_API_KEY" not in env:
         print("warning: no API_KEY found in .env; auth-requiring live tests will skip")
-    print(f"=== Running live tests against {env['BLENDERKIT_SERVER']} ===")
+    print(f"=== Running live tests against {env['BLENDKIT_SERVER']} ===")
     proc = subprocess.Popen(
         ["go", "test", "-tags=live", "-run", "TestLive", "-v", "./..."],
         cwd=CLIENT_DIR,
@@ -322,7 +322,7 @@ def _verify_windows(file_path: str) -> bool:
         file_path: Path to the .exe binary to verify.
 
     Returns:
-        True if the signature matches the expected BlenderKit identity.
+        True if the signature matches the expected Blendkit identity.
     """
     process = subprocess.Popen(
         ["osslsigncode", "verify", "-in", file_path],
@@ -473,7 +473,7 @@ def docs(args):
 
 def main():
     """Parse CLI arguments and dispatch to the selected command."""
-    parser = argparse.ArgumentParser(description="BlenderKit-Client developer helper.")
+    parser = argparse.ArgumentParser(description="Blendkit-Client developer helper.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_build = sub.add_parser("build", help="Cross-compile the Client for all platforms.")

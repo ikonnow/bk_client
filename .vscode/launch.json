@@ -1,11 +1,11 @@
 {
-    // Launch configurations for the standalone BlenderKit-Client (Go).
+    // Launch configurations for the standalone Blendkit-Client (Go).
     // "Run/Debug/Test Client" require the Go extension (golang.go) and Delve.
     "version": "0.2.0",
     "configurations": [
         {
             // Build the Client from source and run it standalone (no DCC).
-            // Add flags under "args", e.g. ["--port", "62000", "--server", "https://devel.blenderkit.com"].
+            // Add flags under "args", e.g. ["--port", "62000", "--server", "https://devel.blendkit.com"].
             "name": "Run Client (standalone)",
             "type": "go",
             "request": "launch",
@@ -27,7 +27,7 @@
         {
             // Build for the current platform via dev.py and run the binary solo.
             // Standalone => automatic tray icon (Windows), single-instance, no
-            // auto-shutdown. Set BLENDERKIT_SERVER in .env to target devel.
+            // auto-shutdown. Set BLENDKIT_SERVER in .env to target devel.
             "name": "Build + Run Client (dev.py)",
             "type": "debugpy",
             "request": "launch",

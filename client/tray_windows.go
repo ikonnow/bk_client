@@ -34,7 +34,7 @@ import (
 // the same CGO_ENABLED=0 cross-compile used for the shipped binaries.
 const traySupported = true
 
-//go:embed icons/blenderkit.ico
+//go:embed icons/blendkit.ico
 var trayIcon []byte
 
 // runTray shows the Blendkit-Client system tray icon and blocks until the user

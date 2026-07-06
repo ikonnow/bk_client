@@ -1,7 +1,7 @@
 [project]
-name = "blenderkit-client-tools"
+name = "blendkit-client-tools"
 version = "0.0.0"
-description = "Python tooling config for the BlenderKit-Client repository (lints client/tools recipes)."
+description = "Python tooling config for the Blendkit-Client repository (lints client/tools recipes)."
 requires-python = ">=3.10"
 dependencies = []
 

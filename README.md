@@ -1,25 +1,26 @@
 <div align="center">
-  <img src="client/icons/blenderkit_logo.png" alt="Logo" width="100" height="100"/>
-  <h3 align="center">BlenderKit-Client</h3>
+  <img src="client/icons/blendkit.png" alt="Logo" width="100" height="100"/>
+  <h3 align="center">Blendkit-Client</h3>
 
-  Local bridge between BlenderKit DCC add-ons and the BlenderKit service.
+  Local bridge between Blendkit DCC add-ons and the Blendkit service.
 
   [![Project license](https://img.shields.io/github/license/blenderkit/blenderkit.svg?color=orange)](LICENSE)
 </div>
 
 ## About
 
-This repository contains the **BlenderKit-Client** (formerly *daemon*) — a small
+This repository contains the **Blendkit-Client** (formerly *daemon*) — a small
 local HTTP server written in Go. It runs on the user's machine and bridges the
-BlenderKit DCC add-ons with the [BlenderKit service](https://www.blenderkit.com/):
+Blendkit DCC add-ons with the [Blendkit service](https://www.blendkit.com/):
 it handles search, downloads, uploads, login/OAuth2, ratings, comments and more,
 and reports progress back to the connected software.
 
 It is designed to be used in two ways:
 
-- **As a subrepository** embedded into the BlenderKit add-ons:
+- **As a subrepository** embedded into the Blendkit add-ons:
   - [`blenderkit_addon`](https://github.com/BlenderKit/blenderkit) (Blender)
   - `bk_maya` (Maya)
+  - `bk_godot` (Godot)
   - `blenderkit_rhino` (Rhino)
 - **As a standalone app** with its own settings and a small set of features.
 
@@ -31,14 +32,14 @@ side by side.
 ## Repository layout
 
 ```
-client/                 Go source for the BlenderKit-Client
+client/                 Go source for the Blendkit-Client
   *.go                  HTTP handlers, networking, login, download, wrappers…
   internal/apispec/     Route registry — single source of truth for the API
   internal/config/      Standalone on-disk Client settings (no secrets)
   cmd/apidocgen/        Generator: renders docs/openapi.json and docs/API.md
   docs/                 Generated API documentation (OpenAPI 3.1 + Markdown)
   tools/                Bundled Python "recipes" run under headless Blender
-  icons/                Branding assets + embedded tray icon (blenderkit.ico)
+  icons/                Branding assets + embedded tray icon (blendkit.ico)
   VERSION               Current Client version
 dev.py                  Developer helper (build / run / verify / test / lint / docs)
 pyproject.toml          Python tooling config (ruff, pydoclint) for tools/
@@ -84,7 +85,7 @@ docs stay in sync with the code.
 
 Planned work for this repository (tracked incrementally):
 
-- **Local Client configuration** stored next to the binary (`blenderkit-client-config.json`),
+- **Local Client configuration** stored next to the binary (`blendkit-client-config.json`),
   excluding the API key, which must be stored with maximum available security.
   Foundation in [`client/internal/config`](client/internal/config/config.go); wiring it
   into Client startup and a settings UI is next.
