@@ -45,7 +45,7 @@ def _emit(tag: str, *parts: object) -> None:
 def status(s: str) -> None:
     """Emit a status update with the given stage name.
 
-    Args:
+    Attributes:
         s: A string representing the current stage of the export process.
     """
     _emit("BK_STATUS", s)
@@ -54,7 +54,7 @@ def status(s: str) -> None:
 def progress(frac: float, msg: str = "") -> None:
     """Emit a progress update with the given fraction (0..1) and optional message.
 
-    Args:
+    Attributes:
         frac: A float between 0 and 1 indicating the completion percentage.
         msg: An optional string message providing additional context about the progress.
     """
@@ -64,7 +64,7 @@ def progress(frac: float, msg: str = "") -> None:
 def done(path: str) -> None:
     """Emit a done update with the given path.
 
-    Args:
+    Attributes:
         path: A string representing the path of the completed export.
     """
     _emit("BK_DONE", path)
@@ -73,7 +73,7 @@ def done(path: str) -> None:
 def error(msg: str) -> None:
     """Emit an error update with the given message.
 
-    Args:
+    Attributes:
         msg: A string representing the error message.
     """
     _emit("BK_ERROR", msg)
@@ -82,14 +82,14 @@ def error(msg: str) -> None:
 def log(msg: str) -> None:
     """Helper to log a message with the BK_PROGRESS tag (for diagnostic purposes).
 
-    Args:
+    Attributes:
         msg: A string representing the log message.
     """
     print(f"[export_usd] {msg}", flush=True)
 
 
 # ---------------------------------------------------------------------------
-# Resolution → textures subfolder suffix (mirrors Blendkit addon paths.py)
+# Resolution → textures subfolder suffix (mirrors blendkit addon paths.py)
 # ---------------------------------------------------------------------------
 
 # Same detection tokens as blendkit_addon/unpack_asset_bg.py::get_resolution_from_file_path
@@ -130,7 +130,7 @@ def _resolve_target_path(tex_rel_dir: str, image: bpy.types.Image, source_path: 
     same filepath. Returned path uses forward slashes (Blender convention)
     and starts with ``//`` so it stays relative to the .blend.
 
-    Args:
+    Attributes:
         tex_rel_dir: The relative directory (e.g., "//textures/") where the image should be placed.
         image: The Blender image object for which to resolve the target path.
         source_path: An optional string representing the original source path of the image,
@@ -318,10 +318,10 @@ def _rename_shader_nodes_to_material() -> None:
     log(f"rename: shader nodes renamed = {total}")
 
 
-def _ungroup_all(node_tree: bpy.types.NodeTree, owner: bpy.types.ID) -> int:
+def _ungroup_all(node_tree, owner) -> int:
     """Recursively ungroup all ShaderNodeGroups in *node_tree*.
 
-    Args:
+    Attributes:
         node_tree: A Blender node tree to process.
         owner: The owner of the node tree (e.g., a Material) for context during ungrouping.
 
@@ -359,10 +359,10 @@ def _ungroup_all(node_tree: bpy.types.NodeTree, owner: bpy.types.ID) -> int:
     return expanded
 
 
-def _manual_inline(parent_tree: bpy.types.NodeTree, group_node: bpy.types.Node) -> bool:
+def _manual_inline(parent_tree, group_node) -> bool:
     """Fallback manual inlining if the group_ungroup operator fails (e.g. on complex node groups with reroutes).
 
-    Args:
+    Attributes:
         parent_tree: The node tree into which the group should be inlined.
         group_node: The ShaderNodeGroup to be inlined.
 
@@ -419,7 +419,7 @@ def _manual_inline(parent_tree: bpy.types.NodeTree, group_node: bpy.types.Node) 
 # ---------------------------------------------------------------------------
 
 
-def _is_rigged_or_unsplittable(obj: bpy.types.Object) -> str:
+def _is_rigged_or_unsplittable(obj) -> str:
     """Return a non-empty reason string if *obj* must NOT be split, else ''.
 
     Splitting a mesh that participates in a rig destroys deformation
@@ -428,7 +428,7 @@ def _is_rigged_or_unsplittable(obj: bpy.types.Object) -> str:
     new seams). For those meshes we leave the multi-material binding
     intact and rely on USD ``GeomSubset`` instead.
 
-    Args:
+    Attributes:
         obj: A Blender object to check for rigging or unsplittable features.
 
     Returns:
@@ -925,12 +925,12 @@ def export_to_usd(
 ) -> None:
     """Export a .blend to .usd with the necessary pre-processing for Maya compatibility.
 
-    Args:
-      blend_path: path to the source .blend file to export
-      out_usd: path to write the resulting .usd file
-      asset_type: Blendkit asset type ("material" gets a preview-mesh step)
-      asset_name: asset display name (used to locate the asset material)
-      asset_id: Blendkit asset id (used to locate the asset material)
+    Attributes:
+      - blend_path: path to the source .blend file to export
+      - out_usd: path to write the resulting .usd file
+      - asset_type: Blendkit asset type ("material" gets a preview-mesh step)
+      - asset_name: asset display name (used to locate the asset material)
+      - asset_id: Blendkit asset id (used to locate the asset material)
     """
     status("Opening blend")
     bpy.ops.wm.open_mainfile(filepath=blend_path)

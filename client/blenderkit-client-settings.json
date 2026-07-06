@@ -1,0 +1,14 @@
+{
+  "current_version": "0.0.0",
+  "versions": {
+    "0.0.0": {
+      "revision": 1,
+      "updated_at": "2026-07-06T21:33:04.9403964Z",
+      "shared": {
+        "server": "https://www.blendkit.com"
+      },
+      "global_variables": {},
+      "plugin_variables": {}
+    }
+  }
+}

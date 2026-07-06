@@ -1,4 +1,4 @@
-// Package apispec is the single source of truth for the BlenderKit-Client HTTP API.
+// Package apispec is the single source of truth for the Blendkit-Client HTTP API.
 //
 // The Routes() registry below describes every endpoint the Client exposes. It is
 // consumed by:
@@ -34,7 +34,7 @@ type Route struct {
 	// RequestNote documents non-JSON inputs (e.g. query parameters) or other
 	// request details that the struct name alone does not convey.
 	RequestNote string
-	// RequiresAPIKey reports whether a logged-in BlenderKit API key is needed
+	// RequiresAPIKey reports whether a logged-in Blendkit API key is needed
 	// for the endpoint to do useful work.
 	RequiresAPIKey bool
 }
@@ -42,6 +42,7 @@ type Route struct {
 // Tags are the endpoint groups in the order they should appear in docs.
 var Tags = []string{
 	"core",
+	"settings",
 	"login",
 	"blender",
 	"host-agnostic",
@@ -87,11 +88,31 @@ func Routes() []Route {
 			Handler:     "DebugNetworkHandler",
 		},
 
+		// SETTINGS - the Client is the source of truth; plugins sync from it.
+		{
+			Path: "/settings/get", Methods: []string{"GET", "POST"}, Versioned: true, Tag: "settings",
+			Summary:     "Get Client settings",
+			Description: "Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.",
+			Handler:     "getSettingsHandler",
+		},
+		{
+			Path: "/settings/set", Methods: []string{"POST"}, Versioned: true, Tag: "settings",
+			Summary:     "Change shared settings",
+			Description: "Applies a change to the shared settings (only the fields present in the body are modified), bumps the revision and returns the new snapshot. The change is broadcast to every connected plugin on their next /report poll.",
+			Handler:     "setSettingsHandler", RequestType: "SetSettingsData",
+		},
+		{
+			Path: "/settings/set_variable", Methods: []string{"POST"}, Versioned: true, Tag: "settings",
+			Summary:     "Store a variable",
+			Description: "Stores a free-form variable/value pair on behalf of a plugin. An empty 'plugin' stores it globally (without plugin association); a non-empty 'plugin' namespaces it under that plugin name (e.g. blender -> executable). Bumps the revision and returns the new snapshot; the change is broadcast on the next /report poll.",
+			Handler:     "setVariableHandler", RequestType: "SetVariableData",
+		},
+
 		// LOGIN / OAUTH2
 		{
 			Path: "/consumer/exchange/", Methods: []string{"GET"}, Versioned: false, Tag: "login",
 			Summary:     "OAuth2 redirect landing",
-			Description: "Browser redirect target after the user logs in on blenderkit.com. Validates the OAuth2 code and state query parameters, exchanges the code for tokens and redirects the browser to the server's oauth-landing page. Intentionally unversioned to keep the server-side redirect URL simple.",
+			Description: "Browser redirect target after the user logs in on blendkit.com. Validates the OAuth2 code and state query parameters, exchanges the code for tokens and redirects the browser to the server's oauth-landing page. Intentionally unversioned to keep the server-side redirect URL simple.",
 			Handler:     "consumerExchangeHandler",
 			RequestNote: "Query parameters: code (authorization code), state (CSRF/session state).",
 		},
@@ -171,7 +192,7 @@ func Routes() []Route {
 		{
 			Path: "/profiles/get_user_profile", Methods: []string{"POST"}, Versioned: true, Tag: "profiles",
 			Summary:     "Get user profile",
-			Description: "Fetches the logged-in user's BlenderKit profile.",
+			Description: "Fetches the logged-in user's Blendkit profile.",
 			Handler:     "GetUserProfileHandler", RequestType: "MinimalTaskData", RequiresAPIKey: true,
 		},
 
@@ -251,13 +272,13 @@ func Routes() []Route {
 		{
 			Path: "/wrappers/blocking_request", Methods: []string{"POST"}, Versioned: true, Tag: "wrappers",
 			Summary:     "Proxy a blocking HTTP request",
-			Description: "Blocking helper that performs an arbitrary HTTP request to the BlenderKit server through the Client's configured HTTP client and returns the response.",
+			Description: "Blocking helper that performs an arbitrary HTTP request to the Blendkit server through the Client's configured HTTP client and returns the response.",
 			Handler:     "BlockingRequestHandler", RequestType: "BlockingRequestData",
 		},
 		{
 			Path: "/wrappers/nonblocking_request", Methods: []string{"POST"}, Versioned: true, Tag: "wrappers",
 			Summary:     "Proxy a non-blocking HTTP request",
-			Description: "Schedules an arbitrary HTTP request to the BlenderKit server; the response is reported back through /report tasks.",
+			Description: "Schedules an arbitrary HTTP request to the Blendkit server; the response is reported back through /report tasks.",
 			Handler:     "NonblockingRequestHandler", RequestType: "NonblockingRequestTaskData",
 		},
 

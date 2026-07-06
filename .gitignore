@@ -5,6 +5,7 @@ client/v*.*.*
 client/client.exe
 client/blenderkit-client-dev
 client/blenderkit-client-dev.exe
+__debug_bin.exe
 
 client_builds
 .mypy_cache

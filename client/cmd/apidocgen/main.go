@@ -1,4 +1,4 @@
-// Command apidocgen renders the BlenderKit-Client API documentation from the
+// Command apidocgen renders the Blendkit-Client API documentation from the
 // route registry in internal/apispec.
 //
 // It writes two files into the output directory:

@@ -40,6 +40,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/blenderkit/blenderkit/client/internal/settings"
 	"github.com/google/uuid"
 	"github.com/gookit/color"
 )
@@ -278,7 +279,7 @@ func main() {
 	// behaviour.
 	standalone := *StartingAddonVersion == ""
 
-	// Allow BLENDERKIT_SERVER to set the server when --server was not passed
+	// Allow BLENDKIT_SERVER to set the server when --server was not passed
 	// explicitly. An add-on always passes --server, so this only affects manual
 	// standalone/dev runs and never overrides an add-on-spawned Client.
 	serverSetByFlag := false
@@ -288,7 +289,7 @@ func main() {
 		}
 	})
 	if !serverSetByFlag {
-		if envServer := os.Getenv("BLENDERKIT_SERVER"); envServer != "" {
+		if envServer := os.Getenv("BLENDKIT_SERVER"); envServer != "" {
 			*Server = envServer
 		}
 	}
@@ -319,6 +320,20 @@ func main() {
 	}
 
 	CreateHTTPClients(*proxy_address, *proxy_which, *ssl_context, *trusted_ca_certs)
+
+	// Initialize the Client-owned settings store. The Client is the source of
+	// truth for settings shared with plugins; settings are scoped to this Client
+	// version and a new version inherits from the most recent previous one. The
+	// shared server is seeded from the resolved startup server.
+	if settingsPath, err := settings.Path(); err != nil {
+		BKLog.Printf("%v Could not resolve settings path: %v", EmoWarning, err)
+	} else if store, err := settings.Open(settingsPath, ClientVersion, settings.Shared{Server: *Server}); err != nil {
+		BKLog.Printf("%v Could not open settings store: %v", EmoWarning, err)
+	} else {
+		SettingsStore = store
+		BKLog.Printf("%s Settings store ready (v%s, rev %d): %s", EmoOK, ClientVersion, store.Snapshot().Revision, settingsPath)
+	}
+
 	// Standalone Clients are persistent, so the inactivity auto-shutdown (used
 	// when an add-on spawns the Client) is skipped.
 	if !standalone {
@@ -339,6 +354,14 @@ func main() {
 	mux.HandleFunc("/"+vapi+"/shutdown", shutdownHandler)
 	mux.HandleFunc("/debug", DebugNetworkHandler)
 	mux.HandleFunc("/"+vapi+"/debug", DebugNetworkHandler)
+
+	// SETTINGS - Client is the source of truth; plugins sync from here.
+	mux.HandleFunc("/settings/get", getSettingsHandler)
+	mux.HandleFunc("/"+vapi+"/settings/get", getSettingsHandler)
+	mux.HandleFunc("/settings/set", setSettingsHandler)
+	mux.HandleFunc("/"+vapi+"/settings/set", setSettingsHandler)
+	mux.HandleFunc("/settings/set_variable", setVariableHandler)
+	mux.HandleFunc("/"+vapi+"/settings/set_variable", setVariableHandler)
 
 	// LOGIN
 	mux.HandleFunc("/consumer/exchange/", consumerExchangeHandler) // does not use /vX.Y/ to keep stuff simple on server side
@@ -583,6 +606,18 @@ func reportHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	TasksMux.Unlock()
+
+	// Broadcast the Client-owned settings on every report so plugins always
+	// converge to the source of truth: even if a poll is missed, the next one
+	// reconciles. Plugins apply whenever the revision grows. Sent as a task to
+	// keep the response an array (backward compatible with existing add-ons).
+	if SettingsStore != nil {
+		snap := SettingsStore.Snapshot()
+		settingsTask := NewTask(nil, data.AppID, uuid.New().String(), "settings")
+		settingsTask.Result = snap
+		settingsTask.Finish("Client settings")
+		toReport = append(toReport, settingsTask)
+	}
 
 	responseJSON, err := json.Marshal(toReport)
 	if err != nil {

@@ -16,7 +16,7 @@
 
 ##### END GPL LICENSE BLOCK #####*/
 
-// Package config defines the on-disk configuration for the BlenderKit-Client
+// Package config defines the on-disk configuration for the Blendkit-Client
 // when it runs as a standalone app.
 //
 // Historically these options were stored in the host DCC's preferences (Blender,
@@ -31,7 +31,7 @@
 // MULTI-VERSION: several Client versions/instances may exist and run at once. By
 // default the config file lives next to the running executable, so each installed
 // version keeps its own config and there is no cross-version interference. The
-// location can be overridden with the BLENDERKIT_CLIENT_CONFIG environment
+// location can be overridden with the BLENDKIT_CLIENT_CONFIG environment
 // variable (e.g. to share one config across versions).
 package config
 
@@ -44,7 +44,7 @@ import (
 
 // EnvConfigPath is the environment variable that, when set, overrides the
 // default configuration file location.
-const EnvConfigPath = "BLENDERKIT_CLIENT_CONFIG"
+const EnvConfigPath = "BLENDKIT_CLIENT_CONFIG"
 
 // FileName is the default configuration file name used when the config is
 // stored next to the executable.
@@ -53,7 +53,7 @@ const FileName = "blenderkit-client-config.json"
 // Default values mirror the Client's CLI flag defaults in main.go so that a
 // freshly written config reproduces the current out-of-the-box behaviour.
 const (
-	DefaultServer        = "https://www.blenderkit.com"
+	DefaultServer        = "https://www.blendkit.com"
 	DefaultPort          = "62485"
 	DefaultProxyWhich    = "SYSTEM"
 	DefaultSSLContext    = ""
@@ -69,7 +69,7 @@ const (
 // config provides the defaults used when a flag is not supplied (and the values
 // shown/edited by the standalone settings UI).
 type Config struct {
-	// Server is the BlenderKit server address to connect to.
+	// Server is the Blendkit server address to connect to.
 	Server string `json:"server"`
 	// PreferredPort is the port the Client tries to listen on first.
 	PreferredPort string `json:"preferred_port"`
@@ -92,7 +92,8 @@ type Config struct {
 // Default returns a Config populated with the built-in default values.
 //
 // Returns:
-//     A Config equivalent to the Client's out-of-the-box CLI defaults.
+//
+//	A Config equivalent to the Client's out-of-the-box CLI defaults.
 func Default() Config {
 	return Config{
 		Server:         DefaultServer,
@@ -109,22 +110,25 @@ func Default() Config {
 // path: the FileName located in the same directory as the executable.
 //
 // Args:
-//     executablePath: Absolute or relative path to the Client executable.
+//
+//	executablePath: Absolute or relative path to the Client executable.
 //
 // Returns:
-//     The config file path next to the executable.
+//
+//	The config file path next to the executable.
 func DefaultPathFor(executablePath string) string {
 	return filepath.Join(filepath.Dir(executablePath), FileName)
 }
 
 // Path resolves the configuration file path.
 //
-// It returns the value of the BLENDERKIT_CLIENT_CONFIG environment variable when
+// It returns the value of the BLENDKIT_CLIENT_CONFIG environment variable when
 // set, otherwise the FileName located next to the running executable.
 //
 // Returns:
-//     The resolved config file path, or an error if the executable path cannot
-//     be determined.
+//
+//	The resolved config file path, or an error if the executable path cannot
+//	be determined.
 func Path() (string, error) {
 	if p := os.Getenv(EnvConfigPath); p != "" {
 		return p, nil
@@ -144,11 +148,13 @@ func Path() (string, error) {
 // default value (Load starts from Default()).
 //
 // Args:
-//     path: Path to the JSON configuration file.
+//
+//	path: Path to the JSON configuration file.
 //
 // Returns:
-//     The loaded (or default) Config, a bool reporting whether the file existed,
-//     and an error if the file existed but could not be read or parsed.
+//
+//	The loaded (or default) Config, a bool reporting whether the file existed,
+//	and an error if the file existed but could not be read or parsed.
 func Load(path string) (Config, bool, error) {
 	cfg := Default()
 	data, err := os.ReadFile(path)
@@ -171,10 +177,12 @@ func Load(path string) (Config, bool, error) {
 // directory is created if necessary.
 //
 // Args:
-//     path: Destination path for the JSON configuration file.
+//
+//	path: Destination path for the JSON configuration file.
 //
 // Returns:
-//     An error if the config could not be marshalled or written.
+//
+//	An error if the config could not be marshalled or written.
 func (c Config) Save(path string) error {
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {

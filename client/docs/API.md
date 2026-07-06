@@ -1,10 +1,10 @@
-# BlenderKit-Client API
+# Blendkit-Client API
 
 > Generated from `internal/apispec` by `cmd/apidocgen`. Do not edit by hand.
 
 **Client version:** `1.10.0` &nbsp;&nbsp; **Versioned prefix:** `/v1.10`
 
-The Client is a local HTTP server (default port **62485**) that bridges BlenderKit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the BlenderKit web service.
+The Client is a local HTTP server (default port **62485**) that bridges Blendkit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the Blendkit web service.
 
 Most endpoints are registered twice: once under the bare path (e.g. `/report`) and once under the versioned prefix (e.g. `/v1.10/report`). Both are equivalent.
 
@@ -20,6 +20,14 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 | POST | `/report` | ✓ |  | Poll for tasks (Blender) | `GetReportData` |
 | GET, POST | `/shutdown` | ✓ |  | Shut down the Client | — |
 | GET | `/debug` | ✓ |  | Network/debug diagnostics | — |
+
+### settings
+
+| Method | Path | Versioned | Auth | Summary | Request body |
+|---|---|:---:|:---:|---|---|
+| GET, POST | `/settings/get` | ✓ |  | Get Client settings | — |
+| POST | `/settings/set` | ✓ |  | Change shared settings | `SetSettingsData` |
+| POST | `/settings/set_variable` | ✓ |  | Store a variable | `SetVariableData` |
 
 ### login
 
@@ -133,11 +141,36 @@ Returns diagnostic information about the Client's network configuration, useful 
 - **Handler:** `DebugNetworkHandler`
 - **Versioned alias:** `/v1.10/debug`
 
+### settings
+
+#### `GET / POST /settings/get`
+
+Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.
+
+- **Handler:** `getSettingsHandler`
+- **Versioned alias:** `/v1.10/settings/get`
+
+#### `POST /settings/set`
+
+Applies a change to the shared settings (only the fields present in the body are modified), bumps the revision and returns the new snapshot. The change is broadcast to every connected plugin on their next /report poll.
+
+- **Handler:** `setSettingsHandler`
+- **Versioned alias:** `/v1.10/settings/set`
+- **Request body:** JSON `SetSettingsData` (Go struct in package main)
+
+#### `POST /settings/set_variable`
+
+Stores a free-form variable/value pair on behalf of a plugin. An empty 'plugin' stores it globally (without plugin association); a non-empty 'plugin' namespaces it under that plugin name (e.g. blender -> executable). Bumps the revision and returns the new snapshot; the change is broadcast on the next /report poll.
+
+- **Handler:** `setVariableHandler`
+- **Versioned alias:** `/v1.10/settings/set_variable`
+- **Request body:** JSON `SetVariableData` (Go struct in package main)
+
 ### login
 
 #### `GET /consumer/exchange/`
 
-Browser redirect target after the user logs in on blenderkit.com. Validates the OAuth2 code and state query parameters, exchanges the code for tokens and redirects the browser to the server's oauth-landing page. Intentionally unversioned to keep the server-side redirect URL simple.
+Browser redirect target after the user logs in on blendkit.com. Validates the OAuth2 code and state query parameters, exchanges the code for tokens and redirects the browser to the server's oauth-landing page. Intentionally unversioned to keep the server-side redirect URL simple.
 
 - **Handler:** `consumerExchangeHandler`
 - **Request notes:** Query parameters: code (authorization code), state (CSRF/session state).
@@ -165,7 +198,7 @@ Revokes the API key and refresh token on the server and logs the user out of all
 - **Handler:** `OAuth2LogoutHandler`
 - **Versioned alias:** `/v1.10/oauth2/logout`
 - **Request body:** JSON `RefreshTokenData` (Go struct in package main)
-- **Auth:** requires a logged-in BlenderKit API key
+- **Auth:** requires a logged-in Blendkit API key
 
 ### blender
 
@@ -217,7 +250,7 @@ Starts an asynchronous asset upload. Progress and result are reported back throu
 - **Handler:** `assetUploadHandler`
 - **Versioned alias:** `/v1.10/blender/asset_upload`
 - **Request body:** JSON `AssetUploadRequestData` (Go struct in package main)
-- **Auth:** requires a logged-in BlenderKit API key
+- **Auth:** requires a logged-in Blendkit API key
 
 ### host-agnostic
 
@@ -241,12 +274,12 @@ Downloads a user's gravatar/avatar image into the Client temp directory.
 
 #### `POST /profiles/get_user_profile`
 
-Fetches the logged-in user's BlenderKit profile.
+Fetches the logged-in user's Blendkit profile.
 
 - **Handler:** `GetUserProfileHandler`
 - **Versioned alias:** `/v1.10/profiles/get_user_profile`
 - **Request body:** JSON `MinimalTaskData` (Go struct in package main)
-- **Auth:** requires a logged-in BlenderKit API key
+- **Auth:** requires a logged-in Blendkit API key
 
 ### comments
 
@@ -265,7 +298,7 @@ Posts a new comment (or reply) on an asset.
 - **Handler:** `CreateCommentHandler`
 - **Versioned alias:** `/v1.10/comments/create_comment`
 - **Request body:** JSON `CreateCommentData` (Go struct in package main)
-- **Auth:** requires a logged-in BlenderKit API key
+- **Auth:** requires a logged-in Blendkit API key
 
 #### `POST /comments/feedback_comment`
 
@@ -274,7 +307,7 @@ Sends feedback (like or dislike) on a comment.
 - **Handler:** `FeedbackCommentHandler`
 - **Versioned alias:** `/v1.10/comments/feedback_comment`
 - **Request body:** JSON `FeedbackCommentTaskData` (Go struct in package main)
-- **Auth:** requires a logged-in BlenderKit API key
+- **Auth:** requires a logged-in Blendkit API key
 
 #### `POST /comments/mark_comment_private`
 
@@ -283,7 +316,7 @@ Marks a comment as private or public.
 - **Handler:** `MarkCommentPrivateHandler`
 - **Versioned alias:** `/v1.10/comments/mark_comment_private`
 - **Request body:** JSON `MarkCommentPrivateTaskData` (Go struct in package main)
-- **Auth:** requires a logged-in BlenderKit API key
+- **Auth:** requires a logged-in Blendkit API key
 
 ### notifications
 
@@ -294,7 +327,7 @@ Marks a server notification as read.
 - **Handler:** `MarkNotificationReadHandler`
 - **Versioned alias:** `/v1.10/notifications/mark_notification_read`
 - **Request body:** JSON `MarkNotificationReadTaskData` (Go struct in package main)
-- **Auth:** requires a logged-in BlenderKit API key
+- **Auth:** requires a logged-in Blendkit API key
 
 ### ratings
 
@@ -305,7 +338,7 @@ Fetches the user's bookmarked assets.
 - **Handler:** `GetBookmarksHandler`
 - **Versioned alias:** `/v1.10/ratings/get_bookmarks`
 - **Request body:** JSON `MinimalTaskData` (Go struct in package main)
-- **Auth:** requires a logged-in BlenderKit API key
+- **Auth:** requires a logged-in Blendkit API key
 
 #### `POST /ratings/get_rating`
 
@@ -314,7 +347,7 @@ Fetches the user's ratings for an asset.
 - **Handler:** `GetRatingHandler`
 - **Versioned alias:** `/v1.10/ratings/get_rating`
 - **Request body:** JSON `GetRatingData` (Go struct in package main)
-- **Auth:** requires a logged-in BlenderKit API key
+- **Auth:** requires a logged-in Blendkit API key
 
 #### `POST /ratings/send_rating`
 
@@ -323,7 +356,7 @@ Submits a rating for an asset. Only POST is accepted.
 - **Handler:** `SendRatingHandler`
 - **Versioned alias:** `/v1.10/ratings/send_rating`
 - **Request body:** JSON `SendRatingData` (Go struct in package main)
-- **Auth:** requires a logged-in BlenderKit API key
+- **Auth:** requires a logged-in Blendkit API key
 
 ### wrappers
 
@@ -342,7 +375,7 @@ Blocking helper that completes a multi-part file upload.
 - **Handler:** `CompleteUploadFileBlocking`
 - **Versioned alias:** `/v1.10/wrappers/complete_upload_file_blocking`
 - **Request body:** JSON `CompleteUploadFileBlockingData` (Go struct in package main)
-- **Auth:** requires a logged-in BlenderKit API key
+- **Auth:** requires a logged-in Blendkit API key
 
 #### `POST /wrappers/blocking_file_download`
 
@@ -354,7 +387,7 @@ Blocking helper that downloads a file and returns once finished.
 
 #### `POST /wrappers/blocking_request`
 
-Blocking helper that performs an arbitrary HTTP request to the BlenderKit server through the Client's configured HTTP client and returns the response.
+Blocking helper that performs an arbitrary HTTP request to the Blendkit server through the Client's configured HTTP client and returns the response.
 
 - **Handler:** `BlockingRequestHandler`
 - **Versioned alias:** `/v1.10/wrappers/blocking_request`
@@ -362,7 +395,7 @@ Blocking helper that performs an arbitrary HTTP request to the BlenderKit server
 
 #### `POST /wrappers/nonblocking_request`
 
-Schedules an arbitrary HTTP request to the BlenderKit server; the response is reported back through /report tasks.
+Schedules an arbitrary HTTP request to the Blendkit server; the response is reported back through /report tasks.
 
 - **Handler:** `NonblockingRequestHandler`
 - **Versioned alias:** `/v1.10/wrappers/nonblocking_request`

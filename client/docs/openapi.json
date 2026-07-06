@@ -1,10 +1,10 @@
 {
   "info": {
-    "description": "Local HTTP API exposed by the BlenderKit-Client (formerly daemon). The Client runs on localhost and bridges BlenderKit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the BlenderKit web service.\n\nMost endpoints are registered twice: once under the bare path (e.g. `/report`) and once under the versioned prefix (e.g. `/v1.10/report`). Both are equivalent.\n\nThis document is generated from the Go route registry in `internal/apispec` by `cmd/apidocgen`. Do not edit it by hand.",
+    "description": "Local HTTP API exposed by the Blendkit-Client (formerly daemon). The Client runs on localhost and bridges Blendkit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the Blendkit web service.\n\nMost endpoints are registered twice: once under the bare path (e.g. `/report`) and once under the versioned prefix (e.g. `/v1.10/report`). Both are equivalent.\n\nThis document is generated from the Go route registry in `internal/apispec` by `cmd/apidocgen`. Do not edit it by hand.",
     "license": {
       "name": "GPL-2.0-or-later"
     },
-    "title": "BlenderKit-Client API",
+    "title": "Blendkit-Client API",
     "version": "1.10.0"
   },
   "openapi": "3.1.0",
@@ -185,7 +185,7 @@
     },
     "/blender/asset_upload": {
       "post": {
-        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "assetUploadHandler",
         "requestBody": {
           "content": {
@@ -285,7 +285,7 @@
     },
     "/comments/create_comment": {
       "post": {
-        "description": "Posts a new comment (or reply) on an asset.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Posts a new comment (or reply) on an asset.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "CreateCommentHandler",
         "requestBody": {
           "content": {
@@ -319,7 +319,7 @@
     },
     "/comments/feedback_comment": {
       "post": {
-        "description": "Sends feedback (like or dislike) on a comment.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Sends feedback (like or dislike) on a comment.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "FeedbackCommentHandler",
         "requestBody": {
           "content": {
@@ -386,7 +386,7 @@
     },
     "/comments/mark_comment_private": {
       "post": {
-        "description": "Marks a comment as private or public.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Marks a comment as private or public.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "MarkCommentPrivateHandler",
         "requestBody": {
           "content": {
@@ -420,7 +420,7 @@
     },
     "/consumer/exchange/": {
       "get": {
-        "description": "Browser redirect target after the user logs in on blenderkit.com. Validates the OAuth2 code and state query parameters, exchanges the code for tokens and redirects the browser to the server's oauth-landing page. Intentionally unversioned to keep the server-side redirect URL simple.\n\nQuery parameters: code (authorization code), state (CSRF/session state).",
+        "description": "Browser redirect target after the user logs in on blendkit.com. Validates the OAuth2 code and state query parameters, exchanges the code for tokens and redirects the browser to the server's oauth-landing page. Intentionally unversioned to keep the server-side redirect URL simple.\n\nQuery parameters: code (authorization code), state (CSRF/session state).",
         "operationId": "consumerExchangeHandler",
         "responses": {
           "200": {
@@ -528,7 +528,7 @@
     },
     "/notifications/mark_notification_read": {
       "post": {
-        "description": "Marks a server notification as read.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Marks a server notification as read.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "MarkNotificationReadHandler",
         "requestBody": {
           "content": {
@@ -562,7 +562,7 @@
     },
     "/oauth2/logout": {
       "post": {
-        "description": "Revokes the API key and refresh token on the server and logs the user out of all connected apps.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Revokes the API key and refresh token on the server and logs the user out of all connected apps.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "OAuth2LogoutHandler",
         "requestBody": {
           "content": {
@@ -662,7 +662,7 @@
     },
     "/profiles/get_user_profile": {
       "post": {
-        "description": "Fetches the logged-in user's BlenderKit profile.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the logged-in user's Blendkit profile.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetUserProfileHandler",
         "requestBody": {
           "content": {
@@ -696,7 +696,7 @@
     },
     "/ratings/get_bookmarks": {
       "post": {
-        "description": "Fetches the user's bookmarked assets.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the user's bookmarked assets.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetBookmarksHandler",
         "requestBody": {
           "content": {
@@ -730,7 +730,7 @@
     },
     "/ratings/get_rating": {
       "post": {
-        "description": "Fetches the user's ratings for an asset.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the user's ratings for an asset.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetRatingHandler",
         "requestBody": {
           "content": {
@@ -764,7 +764,7 @@
     },
     "/ratings/send_rating": {
       "post": {
-        "description": "Submits a rating for an asset. Only POST is accepted.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Submits a rating for an asset. Only POST is accepted.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "SendRatingHandler",
         "requestBody": {
           "content": {
@@ -892,6 +892,112 @@
         "summary": "Run a Python recipe in headless Blender",
         "tags": [
           "host-agnostic"
+        ]
+      }
+    },
+    "/settings/get": {
+      "get": {
+        "description": "Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.",
+        "operationId": "getSettingsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Client settings",
+        "tags": [
+          "settings"
+        ]
+      },
+      "post": {
+        "description": "Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.",
+        "operationId": "getSettingsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Client settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/settings/set": {
+      "post": {
+        "description": "Applies a change to the shared settings (only the fields present in the body are modified), bumps the revision and returns the new snapshot. The change is broadcast to every connected plugin on their next /report poll.",
+        "operationId": "setSettingsHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SetSettingsData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SetSettingsData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Change shared settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/settings/set_variable": {
+      "post": {
+        "description": "Stores a free-form variable/value pair on behalf of a plugin. An empty 'plugin' stores it globally (without plugin association); a non-empty 'plugin' namespaces it under that plugin name (e.g. blender -\u003e executable). Bumps the revision and returns the new snapshot; the change is broadcast on the next /report poll.",
+        "operationId": "setVariableHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SetVariableData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SetVariableData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Store a variable",
+        "tags": [
+          "settings"
         ]
       }
     },
@@ -1090,7 +1196,7 @@
     },
     "/v1.10/blender/asset_upload": {
       "post": {
-        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "assetUploadHandler",
         "requestBody": {
           "content": {
@@ -1190,7 +1296,7 @@
     },
     "/v1.10/comments/create_comment": {
       "post": {
-        "description": "Posts a new comment (or reply) on an asset.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Posts a new comment (or reply) on an asset.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "CreateCommentHandler",
         "requestBody": {
           "content": {
@@ -1224,7 +1330,7 @@
     },
     "/v1.10/comments/feedback_comment": {
       "post": {
-        "description": "Sends feedback (like or dislike) on a comment.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Sends feedback (like or dislike) on a comment.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "FeedbackCommentHandler",
         "requestBody": {
           "content": {
@@ -1291,7 +1397,7 @@
     },
     "/v1.10/comments/mark_comment_private": {
       "post": {
-        "description": "Marks a comment as private or public.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Marks a comment as private or public.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "MarkCommentPrivateHandler",
         "requestBody": {
           "content": {
@@ -1412,7 +1518,7 @@
     },
     "/v1.10/notifications/mark_notification_read": {
       "post": {
-        "description": "Marks a server notification as read.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Marks a server notification as read.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "MarkNotificationReadHandler",
         "requestBody": {
           "content": {
@@ -1446,7 +1552,7 @@
     },
     "/v1.10/oauth2/logout": {
       "post": {
-        "description": "Revokes the API key and refresh token on the server and logs the user out of all connected apps.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Revokes the API key and refresh token on the server and logs the user out of all connected apps.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "OAuth2LogoutHandler",
         "requestBody": {
           "content": {
@@ -1546,7 +1652,7 @@
     },
     "/v1.10/profiles/get_user_profile": {
       "post": {
-        "description": "Fetches the logged-in user's BlenderKit profile.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the logged-in user's Blendkit profile.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetUserProfileHandler",
         "requestBody": {
           "content": {
@@ -1580,7 +1686,7 @@
     },
     "/v1.10/ratings/get_bookmarks": {
       "post": {
-        "description": "Fetches the user's bookmarked assets.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the user's bookmarked assets.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetBookmarksHandler",
         "requestBody": {
           "content": {
@@ -1614,7 +1720,7 @@
     },
     "/v1.10/ratings/get_rating": {
       "post": {
-        "description": "Fetches the user's ratings for an asset.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Fetches the user's ratings for an asset.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetRatingHandler",
         "requestBody": {
           "content": {
@@ -1648,7 +1754,7 @@
     },
     "/v1.10/ratings/send_rating": {
       "post": {
-        "description": "Submits a rating for an asset. Only POST is accepted.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Submits a rating for an asset. Only POST is accepted.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "SendRatingHandler",
         "requestBody": {
           "content": {
@@ -1779,6 +1885,112 @@
         ]
       }
     },
+    "/v1.10/settings/get": {
+      "get": {
+        "description": "Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.",
+        "operationId": "getSettingsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Client settings",
+        "tags": [
+          "settings"
+        ]
+      },
+      "post": {
+        "description": "Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.",
+        "operationId": "getSettingsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Client settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/v1.10/settings/set": {
+      "post": {
+        "description": "Applies a change to the shared settings (only the fields present in the body are modified), bumps the revision and returns the new snapshot. The change is broadcast to every connected plugin on their next /report poll.",
+        "operationId": "setSettingsHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SetSettingsData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SetSettingsData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Change shared settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/v1.10/settings/set_variable": {
+      "post": {
+        "description": "Stores a free-form variable/value pair on behalf of a plugin. An empty 'plugin' stores it globally (without plugin association); a non-empty 'plugin' namespaces it under that plugin name (e.g. blender -\u003e executable). Bumps the revision and returns the new snapshot; the change is broadcast on the next /report poll.",
+        "operationId": "setVariableHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SetVariableData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SetVariableData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Store a variable",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/v1.10/shutdown": {
       "get": {
         "description": "Schedules a graceful exit of the Client process shortly after responding 200 OK.",
@@ -1854,7 +2066,7 @@
     },
     "/v1.10/wrappers/blocking_request": {
       "post": {
-        "description": "Blocking helper that performs an arbitrary HTTP request to the BlenderKit server through the Client's configured HTTP client and returns the response.",
+        "description": "Blocking helper that performs an arbitrary HTTP request to the Blendkit server through the Client's configured HTTP client and returns the response.",
         "operationId": "BlockingRequestHandler",
         "requestBody": {
           "content": {
@@ -1887,7 +2099,7 @@
     },
     "/v1.10/wrappers/complete_upload_file_blocking": {
       "post": {
-        "description": "Blocking helper that completes a multi-part file upload.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Blocking helper that completes a multi-part file upload.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "CompleteUploadFileBlocking",
         "requestBody": {
           "content": {
@@ -1954,7 +2166,7 @@
     },
     "/v1.10/wrappers/nonblocking_request": {
       "post": {
-        "description": "Schedules an arbitrary HTTP request to the BlenderKit server; the response is reported back through /report tasks.",
+        "description": "Schedules an arbitrary HTTP request to the Blendkit server; the response is reported back through /report tasks.",
         "operationId": "NonblockingRequestHandler",
         "requestBody": {
           "content": {
@@ -2020,7 +2232,7 @@
     },
     "/wrappers/blocking_request": {
       "post": {
-        "description": "Blocking helper that performs an arbitrary HTTP request to the BlenderKit server through the Client's configured HTTP client and returns the response.",
+        "description": "Blocking helper that performs an arbitrary HTTP request to the Blendkit server through the Client's configured HTTP client and returns the response.",
         "operationId": "BlockingRequestHandler",
         "requestBody": {
           "content": {
@@ -2053,7 +2265,7 @@
     },
     "/wrappers/complete_upload_file_blocking": {
       "post": {
-        "description": "Blocking helper that completes a multi-part file upload.\n\nRequires a logged-in BlenderKit API key.",
+        "description": "Blocking helper that completes a multi-part file upload.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "CompleteUploadFileBlocking",
         "requestBody": {
           "content": {
@@ -2120,7 +2332,7 @@
     },
     "/wrappers/nonblocking_request": {
       "post": {
-        "description": "Schedules an arbitrary HTTP request to the BlenderKit server; the response is reported back through /report tasks.",
+        "description": "Schedules an arbitrary HTTP request to the Blendkit server; the response is reported back through /report tasks.",
         "operationId": "NonblockingRequestHandler",
         "requestBody": {
           "content": {
@@ -2154,7 +2366,7 @@
   },
   "servers": [
     {
-      "description": "Local BlenderKit-Client. Default port is 62485.",
+      "description": "Local Blendkit-Client. Default port is 62485.",
       "url": "http://localhost:{port}",
       "variables": {
         "port": {
@@ -2166,6 +2378,9 @@
   "tags": [
     {
       "name": "core"
+    },
+    {
+      "name": "settings"
     },
     {
       "name": "login"

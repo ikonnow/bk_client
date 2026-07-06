@@ -50,11 +50,11 @@ func OpenAPI(version string) ([]byte, error) {
 	doc := map[string]any{
 		"openapi": "3.1.0",
 		"info": map[string]any{
-			"title":   "BlenderKit-Client API",
+			"title":   "Blendkit-Client API",
 			"version": version,
-			"description": "Local HTTP API exposed by the BlenderKit-Client (formerly daemon). " +
-				"The Client runs on localhost and bridges BlenderKit DCC add-ons (Blender, Godot, " +
-				"and embedders such as Maya and Rhino) with the BlenderKit web service.\n\n" +
+			"description": "Local HTTP API exposed by the Blendkit-Client (formerly daemon). " +
+				"The Client runs on localhost and bridges Blendkit DCC add-ons (Blender, Godot, " +
+				"and embedders such as Maya and Rhino) with the Blendkit web service.\n\n" +
 				"Most endpoints are registered twice: once under the bare path (e.g. `/report`) and " +
 				"once under the versioned prefix (e.g. `/" + prefix + "/report`). Both are equivalent.\n\n" +
 				"This document is generated from the Go route registry in " +
@@ -66,7 +66,7 @@ func OpenAPI(version string) ([]byte, error) {
 		"servers": []any{
 			map[string]any{
 				"url":         "http://localhost:{port}",
-				"description": "Local BlenderKit-Client. Default port is 62485.",
+				"description": "Local Blendkit-Client. Default port is 62485.",
 				"variables": map[string]any{
 					"port": map[string]any{"default": "62485"},
 				},
@@ -143,7 +143,7 @@ func operationDescription(r Route) string {
 		desc += "\n\n" + r.RequestNote
 	}
 	if r.RequiresAPIKey {
-		desc += "\n\nRequires a logged-in BlenderKit API key."
+		desc += "\n\nRequires a logged-in Blendkit API key."
 	}
 	return desc
 }

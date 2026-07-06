@@ -51,7 +51,9 @@ def ensure_gltf_addon():
     except Exception as exc:
         # No addon_utils means we're inside something that's not real
         # Blender — bail with a clear error instead of carrying on.
-        raise RuntimeError(f"export_glb: addon_utils unavailable ({exc!r}); cannot enable glTF addon.") from exc
+        raise RuntimeError(
+            f"export_glb: addon_utils unavailable ({exc!r}); cannot enable glTF addon.",
+        ) from exc
 
     # 1) Discover by scanning installed modules. Survives the
     #    addon→extension rename without us tracking module paths.
@@ -116,7 +118,9 @@ def ensure_gltf_addon():
                 )
             return
 
-    raise RuntimeError(f"export_glb: could not enable glTF addon. tried_candidates={candidates} last_err={last_err!r}")
+    raise RuntimeError(
+        f"export_glb: could not enable glTF addon. tried_candidates={candidates} last_err={last_err!r}",
+    )
 
 
 argv = sys.argv

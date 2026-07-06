@@ -18,12 +18,12 @@ func Markdown(version string) string {
 	prefix := VersionPrefix(version)
 	var b strings.Builder
 
-	b.WriteString("# BlenderKit-Client API\n\n")
+	b.WriteString("# Blendkit-Client API\n\n")
 	b.WriteString("> Generated from `internal/apispec` by `cmd/apidocgen`. Do not edit by hand.\n\n")
 	fmt.Fprintf(&b, "**Client version:** `%s` &nbsp;&nbsp; **Versioned prefix:** `/%s`\n\n", version, prefix)
-	b.WriteString("The Client is a local HTTP server (default port **62485**) that bridges BlenderKit ")
+	b.WriteString("The Client is a local HTTP server (default port **62485**) that bridges Blendkit ")
 	b.WriteString("DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the ")
-	b.WriteString("BlenderKit web service.\n\n")
+	b.WriteString("Blendkit web service.\n\n")
 	b.WriteString("Most endpoints are registered twice: once under the bare path (e.g. `/report`) and ")
 	fmt.Fprintf(&b, "once under the versioned prefix (e.g. `/%s/report`). Both are equivalent.\n\n", prefix)
 	b.WriteString("A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this file. ")
@@ -81,7 +81,7 @@ func Markdown(version string) string {
 				fmt.Fprintf(&b, "- **Request notes:** %s\n", r.RequestNote)
 			}
 			if r.RequiresAPIKey {
-				b.WriteString("- **Auth:** requires a logged-in BlenderKit API key\n")
+				b.WriteString("- **Auth:** requires a logged-in Blendkit API key\n")
 			}
 			b.WriteString("\n")
 		}
