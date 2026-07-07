@@ -72,6 +72,21 @@ type Shared struct {
 	Server string `json:"server"`
 }
 
+// Executable describes an external program (e.g. Blender) the Client stores on
+// behalf of plugins. Once any plugin registers one, every other plugin can
+// reuse it without re-supplying the path — e.g. a Maya add-on can run a bundled
+// Blender recipe using the Blender path a Blender add-on already registered.
+// Executables ride along on the settings Snapshot, so they sync to plugins on
+// every /report just like the rest of the settings.
+type Executable struct {
+	// Path is the absolute path to the executable.
+	Path string `json:"path"`
+	// Version is the reported version string (e.g. "4.2.2"), optional.
+	Version string `json:"version,omitempty"`
+	// Args are default extra arguments to pass on launch, optional.
+	Args []string `json:"args,omitempty"`
+}
+
 // versionSettings is the persisted, mutable state for a single Client version.
 type versionSettings struct {
 	Revision        uint64                       `json:"revision"`
@@ -79,6 +94,7 @@ type versionSettings struct {
 	Shared          Shared                       `json:"shared"`
 	GlobalVariables map[string]string            `json:"global_variables"`
 	PluginVariables map[string]map[string]string `json:"plugin_variables"`
+	Executables     map[string]Executable        `json:"executables"`
 }
 
 // diskFile is the on-disk layout: every known Client version's settings kept
@@ -98,6 +114,7 @@ type Snapshot struct {
 	Shared          Shared                       `json:"shared"`
 	GlobalVariables map[string]string            `json:"global_variables"`
 	PluginVariables map[string]map[string]string `json:"plugin_variables"`
+	Executables     map[string]Executable        `json:"executables"`
 }
 
 // Store is the concurrency-safe, persistent settings store.
@@ -202,11 +219,13 @@ func (s *Store) ensureVersion(defaults Shared) bool {
 		UpdatedAt:       time.Now().UTC(),
 		GlobalVariables: make(map[string]string),
 		PluginVariables: make(map[string]map[string]string),
+		Executables:     make(map[string]Executable),
 	}
 	if prev := s.data.Versions[s.mostRecentPreviousVersion()]; prev != nil {
 		vs.Shared = prev.Shared
 		vs.GlobalVariables = cloneStringMap(prev.GlobalVariables)
 		vs.PluginVariables = clonePluginMap(prev.PluginVariables)
+		vs.Executables = cloneExecutableMap(prev.Executables)
 	}
 	if vs.Shared.Server == "" {
 		vs.Shared.Server = defaults.Server
@@ -322,6 +341,60 @@ func (s *Store) GetVariable(plugin, variable string) (string, bool) {
 	return "", false
 }
 
+// SetExecutable stores (or replaces) a named executable and bumps the revision
+// only when something actually changes. Names are used verbatim as the key
+// (e.g. "blender").
+//
+// Args:
+//
+//	name: Executable name/key (e.g. "blender").
+//	exe:  The executable descriptor to store.
+//
+// Returns:
+//
+//	The published Snapshot and an error if persisting failed.
+func (s *Store) SetExecutable(name string, exe Executable) (Snapshot, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vs := s.current()
+	if vs.Executables == nil {
+		vs.Executables = make(map[string]Executable)
+	}
+	if old, ok := vs.Executables[name]; ok && executablesEqual(old, exe) {
+		return *s.cur.Load(), nil
+	}
+	vs.Executables[name] = exe
+	return s.commitLocked()
+}
+
+// GetExecutable returns a stored executable by name.
+//
+// Returns:
+//
+//	The executable and true if present, otherwise a zero Executable and false.
+func (s *Store) GetExecutable(name string) (Executable, bool) {
+	snap := s.Snapshot()
+	exe, ok := snap.Executables[name]
+	return exe, ok
+}
+
+// DeleteExecutable removes a stored executable and bumps the revision if it
+// existed.
+//
+// Returns:
+//
+//	The published Snapshot and an error if persisting failed.
+func (s *Store) DeleteExecutable(name string) (Snapshot, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vs := s.current()
+	if _, ok := vs.Executables[name]; !ok {
+		return *s.cur.Load(), nil
+	}
+	delete(vs.Executables, name)
+	return s.commitLocked()
+}
+
 // DeleteVariable removes a stored variable and bumps the revision if it existed.
 // An empty plugin targets a global variable; a non-empty plugin targets that
 // plugin's namespace.
@@ -376,12 +449,16 @@ func (s *Store) publish() {
 		Shared:          vs.Shared,
 		GlobalVariables: cloneStringMap(vs.GlobalVariables),
 		PluginVariables: clonePluginMap(vs.PluginVariables),
+		Executables:     cloneExecutableMap(vs.Executables),
 	}
 	if snap.GlobalVariables == nil {
 		snap.GlobalVariables = map[string]string{}
 	}
 	if snap.PluginVariables == nil {
 		snap.PluginVariables = map[string]map[string]string{}
+	}
+	if snap.Executables == nil {
+		snap.Executables = map[string]Executable{}
 	}
 	s.cur.Store(snap)
 }
@@ -470,4 +547,32 @@ func clonePluginMap(m map[string]map[string]string) map[string]map[string]string
 		out[k] = cloneStringMap(v)
 	}
 	return out
+}
+
+func cloneExecutableMap(m map[string]Executable) map[string]Executable {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]Executable, len(m))
+	for k, v := range m {
+		if v.Args != nil {
+			args := make([]string, len(v.Args))
+			copy(args, v.Args)
+			v.Args = args
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func executablesEqual(a, b Executable) bool {
+	if a.Path != b.Path || a.Version != b.Version || len(a.Args) != len(b.Args) {
+		return false
+	}
+	for i := range a.Args {
+		if a.Args[i] != b.Args[i] {
+			return false
+		}
+	}
+	return true
 }

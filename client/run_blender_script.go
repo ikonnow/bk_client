@@ -56,7 +56,12 @@ import (
 // recipe is a matter of dropping its .py into tools/ and re-running
 // `go build`. No deploy-script changes needed.
 //
-//go:embed tools/*.py
+// Companion tools/<id>.json manifests are embedded too so GET /tools/list
+// can advertise each recipe's parameters to connected plugins. The .json
+// glob must match at least one file at build time (export_glb.json,
+// export_usd.json satisfy that).
+//
+//go:embed tools/*.py tools/*.json
 var bundledTools embed.FS
 
 // RunBlenderScriptData is the JSON body of POST /run_blender_script.
@@ -100,8 +105,17 @@ func runBlenderScriptHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "set either script_id or script_path, not both", http.StatusBadRequest)
 		return
 	}
+	// blender_exe_path is the caller-supplied override. When omitted, fall back
+	// to the Client-stored "blender" executable (registered via /executable/set
+	// by any plugin), so e.g. Maya can run a recipe without knowing where
+	// Blender lives as long as some plugin registered it earlier.
+	if data.BlenderExePath == "" && SettingsStore != nil {
+		if exe, ok := SettingsStore.GetExecutable("blender"); ok && exe.Path != "" {
+			data.BlenderExePath = exe.Path
+		}
+	}
 	if data.BlenderExePath == "" {
-		http.Error(w, "blender_exe_path is required", http.StatusBadRequest)
+		http.Error(w, "blender_exe_path is required (none supplied and no stored 'blender' executable; register one via /executable/set)", http.StatusBadRequest)
 		return
 	}
 

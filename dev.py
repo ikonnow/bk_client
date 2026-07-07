@@ -36,13 +36,19 @@ Commands:
 """
 
 import argparse
+import hashlib
+import json
 import os
 import shutil
 import subprocess
 import sys
+import zipfile
 
 CLIENT_DIR = "client"
 TOOLS_DIR = os.path.join(CLIENT_DIR, "tools")
+DOCS_DIR = os.path.join(CLIENT_DIR, "docs")
+ICONS_DIR = os.path.join(CLIENT_DIR, "icons")
+VERSION_FILE = os.path.join(CLIENT_DIR, "VERSION")
 
 # Maps keys found in the local .env file to the environment variables the Client
 # and its live tests understand. The .env file is gitignored and intended to hold
@@ -197,6 +203,164 @@ def build(args):
     if not builds_ok:
         sys.exit(1)
     print(f"Blendkit-Client v{version} builds completed in {out_dir}.")
+
+    package(out_dir, version)
+
+
+def _collect_tools() -> list[dict]:
+    """Enumerate the bundled recipes and merge their JSON manifests.
+
+    Mirrors the Client's own /tools/list: every ``tools/<id>.py`` (helper
+    dunder files excluded) becomes an entry, enriched with the optional
+    companion ``tools/<id>.json`` manifest when present.
+
+    Returns:
+        A list of tool dicts (at least ``{"id": ...}``), sorted by id.
+    """
+    tools: list[dict] = []
+    if not os.path.isdir(TOOLS_DIR):
+        return tools
+    for name in sorted(os.listdir(TOOLS_DIR)):
+        if not name.endswith(".py") or name.startswith("__"):
+            continue
+        tool_id = name[: -len(".py")]
+        entry = {"id": tool_id}
+        manifest_path = os.path.join(TOOLS_DIR, tool_id + ".json")
+        if os.path.isfile(manifest_path):
+            try:
+                with open(manifest_path, encoding="utf-8") as fh:
+                    entry.update(json.load(fh))
+            except (OSError, ValueError) as exc:
+                print(f"package: skipping malformed manifest {manifest_path}: {exc}")
+            entry["id"] = tool_id  # filename is authoritative
+        tools.append(entry)
+    return tools
+
+
+def _sha256(path: str) -> str:
+    """Return the hex SHA-256 digest of the file at *path*.
+
+    Args:
+        path: Path to the file to hash.
+
+    Returns:
+        The lowercase hex digest string.
+    """
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def package(out_dir: str, version: str) -> str:
+    """Bundle binaries, tools, docs and metadata into a single release zip.
+
+    Produces ``<out_dir>/blenderkit-client-v<version>.zip`` containing every
+    built platform binary plus the bundled tools (already embedded in each
+    binary, but shipped raw so plugins can inspect them or point
+    BLENDKIT_TOOLS_DIR at them), the generated API docs, the VERSION file,
+    the tray icons and a machine-readable ``manifest.json`` (version, per-binary
+    sha256, and the tool list) for plugin CI to verify and select files.
+
+    All zip members are nested under a ``blenderkit-client-v<version>/`` root
+    so extraction never litters the current directory.
+
+    Args:
+        out_dir: The directory holding the freshly built binaries (``<out>/v<version>``).
+        version: The Client version string, e.g. "1.10.0".
+
+    Returns:
+        The path to the created zip file.
+    """
+    root = f"blenderkit-client-v{version}"
+    zip_path = os.path.join(out_dir, root + ".zip")
+
+    binaries = []
+    for goos, goarch, output in BUILD_TARGETS:
+        bin_path = os.path.join(out_dir, output)
+        if not os.path.isfile(bin_path):
+            print(f"package: WARNING missing binary {output}, skipping in manifest")
+            continue
+        binaries.append(
+            {
+                "os": goos,
+                "arch": goarch,
+                "filename": output,
+                "size": os.path.getsize(bin_path),
+                "sha256": _sha256(bin_path),
+            },
+        )
+
+    manifest = {
+        "name": "blenderkit-client",
+        "version": version,
+        "binaries": binaries,
+        "tools": _collect_tools(),
+    }
+
+    _write_release_zip(zip_path, root, out_dir, binaries, manifest)
+
+    print(f"Blendkit-Client v{version} release bundle written to {zip_path}.")
+    return zip_path
+
+
+def _write_release_zip(zip_path: str, root: str, out_dir: str, binaries: list[dict], manifest: dict) -> None:
+    """Write the release zip with binaries, tools, docs, icons and manifest.
+
+    Every member is nested under *root*/ so extraction stays tidy.
+
+    Args:
+        zip_path: Destination path for the zip archive.
+        root: The top-level directory name inside the archive.
+        out_dir: Directory holding the built binaries.
+        binaries: Binary descriptors (from :func:`package`) whose ``filename`` is zipped.
+        manifest: The machine-readable manifest dict serialised to ``manifest.json``.
+    """
+
+    def _keep_tool(name: str) -> bool:
+        return not name.startswith("__") and name.endswith((".py", ".json"))
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Platform binaries.
+        for entry in binaries:
+            zf.write(os.path.join(out_dir, entry["filename"]), f"{root}/{entry['filename']}")
+
+        # Bundled recipes + their manifests (skip caches/helpers).
+        _add_dir_to_zip(zf, TOOLS_DIR, f"{root}/tools", _keep_tool)
+
+        # Generated API docs.
+        for doc in ("API.md", "openapi.json"):
+            doc_path = os.path.join(DOCS_DIR, doc)
+            if os.path.isfile(doc_path):
+                zf.write(doc_path, f"{root}/docs/{doc}")
+
+        # Tray icons / logos.
+        _add_dir_to_zip(zf, ICONS_DIR, f"{root}/icons")
+
+        # Plain-text version + machine-readable manifest.
+        if os.path.isfile(VERSION_FILE):
+            zf.write(VERSION_FILE, f"{root}/VERSION")
+        zf.writestr(f"{root}/manifest.json", json.dumps(manifest, indent=2) + "\n")
+
+
+def _add_dir_to_zip(zf: zipfile.ZipFile, src_dir: str, arc_dir: str, keep=None) -> None:
+    """Add the top-level files of *src_dir* to *zf* under *arc_dir*.
+
+    Args:
+        zf: The open zip archive to write into.
+        src_dir: Source directory whose files are added (non-recursive).
+        arc_dir: Destination path prefix inside the archive.
+        keep: Optional predicate ``(name) -> bool`` selecting which filenames to include.
+    """
+    if not os.path.isdir(src_dir):
+        return
+    for name in sorted(os.listdir(src_dir)):
+        if keep is not None and not keep(name):
+            continue
+        path = os.path.join(src_dir, name)
+        if os.path.isfile(path):
+            zf.write(path, f"{arc_dir}/{name}")
 
 
 def run(args):

@@ -29,6 +29,9 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 | GET, POST | `/settings/get` | ✓ |  | Get Client settings | — |
 | POST | `/settings/set` | ✓ |  | Change shared settings | `SetSettingsData` |
 | POST | `/settings/set_variable` | ✓ |  | Store a variable | `SetVariableData` |
+| GET | `/executable/list` | ✓ |  | List stored executables | — |
+| GET | `/executable/get` | ✓ |  | Get a stored executable | — |
+| POST | `/executable/set` | ✓ |  | Store an executable | `SetExecutableData` |
 
 ### login
 
@@ -61,6 +64,8 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 | Method | Path | Versioned | Auth | Summary | Request body |
 |---|---|:---:|:---:|---|---|
 | POST | `/run_blender_script` | ✓ |  | Run a Python recipe in headless Blender | `RunBlenderScriptData` |
+| GET | `/tools/list` | ✓ |  | List bundled tools | — |
+| POST | `/tools/run` | ✓ |  | Run a bundled tool | `RunBlenderScriptData` |
 
 ### profiles
 
@@ -191,6 +196,29 @@ Stores a free-form variable/value pair on behalf of a plugin. An empty 'plugin' 
 - **Versioned alias:** `/v1.10/settings/set_variable`
 - **Request body:** JSON `SetVariableData` (Go struct in package main)
 
+#### `GET /executable/list`
+
+Returns all executables the Client keeps on behalf of plugins (name -> path/version/args), e.g. a registered Blender. The same data also rides along on every /report via the settings snapshot; this endpoint is a direct query.
+
+- **Handler:** `listExecutablesHandler`
+- **Versioned alias:** `/v1.10/executable/list`
+
+#### `GET /executable/get`
+
+Returns a single stored executable by the 'name' query parameter (e.g. name=blender). When the executable is not stored, responds 200 with an empty object ({}) so callers can branch on presence without treating absence as an error.
+
+- **Handler:** `getExecutableHandler`
+- **Versioned alias:** `/v1.10/executable/get`
+- **Request notes:** Query parameter: name (executable key, e.g. 'blender').
+
+#### `POST /executable/set`
+
+Registers or replaces a named executable (e.g. 'blender') with its path, optional version and default args. Bumps the settings revision and broadcasts to every connected plugin on their next /report poll. Lets one plugin (e.g. the Blender add-on) publish a Blender path that other plugins (e.g. Maya) can reuse — including as the fallback for /tools/run and /run_blender_script.
+
+- **Handler:** `setExecutableHandler`
+- **Versioned alias:** `/v1.10/executable/set`
+- **Request body:** JSON `SetExecutableData` (Go struct in package main)
+
 ### login
 
 #### `GET /consumer/exchange/`
@@ -294,6 +322,21 @@ Runs a Python recipe under headless Blender. Used by external embedders (e.g. th
 
 - **Handler:** `runBlenderScriptHandler`
 - **Versioned alias:** `/v1.10/run_blender_script`
+- **Request body:** JSON `RunBlenderScriptData` (Go struct in package main)
+
+#### `GET /tools/list`
+
+Returns the recipes embedded in this Client binary, each with its optional parameter schema. Because the tools ship inside the binary, this list always matches exactly what /tools/run can execute. Plugins use it to discover available tools without hard-coding script IDs.
+
+- **Handler:** `listToolsHandler`
+- **Versioned alias:** `/v1.10/tools/list`
+
+#### `POST /tools/run`
+
+Canonical alias for /run_blender_script: runs a bundled recipe (script_id from /tools/list) under headless Blender, forwarding params as params.json. New callers should prefer this endpoint.
+
+- **Handler:** `runBlenderScriptHandler`
+- **Versioned alias:** `/v1.10/tools/run`
 - **Request body:** JSON `RunBlenderScriptData` (Go struct in package main)
 
 ### profiles

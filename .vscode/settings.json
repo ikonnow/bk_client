@@ -30,5 +30,6 @@
     "github.copilot.chat.agent.thinkingTool": true,
     "chat.instructionsFilesLocations": {
         ".github/instructions": true
-    }
+    },
+    "iis.configDir": ""
 }
