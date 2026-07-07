@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="client/icons/blendkit.png" alt="Logo" width="100" height="100"/>
+  <img src="client/icons/blendkit_logo.png" alt="Logo" width="100" height="100"/>
   <h3 align="center">Blendkit-Client</h3>
 
   Local bridge between Blendkit DCC add-ons and the Blendkit service.
