@@ -49,6 +49,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,7 +63,7 @@ const EnvSettingsPath = "BLENDKIT_CLIENT_SETTINGS"
 
 // FileName is the default settings file name used when the settings are stored
 // next to the executable.
-const FileName = "blendkit-client-settings.json"
+const FileName = "bk_client-settings.json"
 
 // Shared holds the typed, Client-wide settings every connected plugin must
 // mirror. Kept intentionally small in phase one.
@@ -78,10 +79,14 @@ type Shared struct {
 // Blender recipe using the Blender path a Blender add-on already registered.
 // Executables ride along on the settings Snapshot, so they sync to plugins on
 // every /report just like the rest of the settings.
+//
+// Several executables can share a name (e.g. multiple Blender versions); they
+// are disambiguated by Version and kept in a list under that name.
 type Executable struct {
 	// Path is the absolute path to the executable.
 	Path string `json:"path"`
-	// Version is the reported version string (e.g. "4.2.2"), optional.
+	// Version is the reported version string (e.g. "4.2.2"). It is also the key
+	// that disambiguates multiple executables sharing a name.
 	Version string `json:"version,omitempty"`
 	// Args are default extra arguments to pass on launch, optional.
 	Args []string `json:"args,omitempty"`
@@ -94,7 +99,7 @@ type versionSettings struct {
 	Shared          Shared                       `json:"shared"`
 	GlobalVariables map[string]string            `json:"global_variables"`
 	PluginVariables map[string]map[string]string `json:"plugin_variables"`
-	Executables     map[string]Executable        `json:"executables"`
+	Executables     map[string][]Executable      `json:"executables"`
 }
 
 // diskFile is the on-disk layout: every known Client version's settings kept
@@ -114,7 +119,7 @@ type Snapshot struct {
 	Shared          Shared                       `json:"shared"`
 	GlobalVariables map[string]string            `json:"global_variables"`
 	PluginVariables map[string]map[string]string `json:"plugin_variables"`
-	Executables     map[string]Executable        `json:"executables"`
+	Executables     map[string][]Executable      `json:"executables"`
 }
 
 // Store is the concurrency-safe, persistent settings store.
@@ -219,7 +224,7 @@ func (s *Store) ensureVersion(defaults Shared) bool {
 		UpdatedAt:       time.Now().UTC(),
 		GlobalVariables: make(map[string]string),
 		PluginVariables: make(map[string]map[string]string),
-		Executables:     make(map[string]Executable),
+		Executables:     make(map[string][]Executable),
 	}
 	if prev := s.data.Versions[s.mostRecentPreviousVersion()]; prev != nil {
 		vs.Shared = prev.Shared
@@ -341,14 +346,16 @@ func (s *Store) GetVariable(plugin, variable string) (string, bool) {
 	return "", false
 }
 
-// SetExecutable stores (or replaces) a named executable and bumps the revision
-// only when something actually changes. Names are used verbatim as the key
-// (e.g. "blender").
+// SetExecutable stores (or replaces) a versioned executable under name.
+// Multiple executables can share a name (e.g. several Blender versions): an
+// existing entry with the same (name, Version) is replaced, otherwise the new
+// one is appended. Entries are kept sorted highest-version-first. The revision
+// is bumped only when something actually changes.
 //
 // Args:
 //
 //	name: Executable name/key (e.g. "blender").
-//	exe:  The executable descriptor to store.
+//	exe:  The executable descriptor to store (its Version disambiguates).
 //
 // Returns:
 //
@@ -358,41 +365,94 @@ func (s *Store) SetExecutable(name string, exe Executable) (Snapshot, error) {
 	defer s.mu.Unlock()
 	vs := s.current()
 	if vs.Executables == nil {
-		vs.Executables = make(map[string]Executable)
+		vs.Executables = make(map[string][]Executable)
 	}
-	if old, ok := vs.Executables[name]; ok && executablesEqual(old, exe) {
-		return *s.cur.Load(), nil
+	list := vs.Executables[name]
+	for i, e := range list {
+		if e.Version == exe.Version {
+			if executablesEqual(e, exe) {
+				return *s.cur.Load(), nil
+			}
+			list[i] = exe
+			vs.Executables[name] = sortExecutables(list)
+			return s.commitLocked()
+		}
 	}
-	vs.Executables[name] = exe
+	vs.Executables[name] = sortExecutables(append(list, exe))
 	return s.commitLocked()
 }
 
-// GetExecutable returns a stored executable by name.
+// GetExecutables returns all stored executables for a name, highest version
+// first. Returns nil when none are stored.
+func (s *Store) GetExecutables(name string) []Executable {
+	return s.Snapshot().Executables[name]
+}
+
+// GetExecutable returns a single stored executable for name. When version is
+// non-empty it must match exactly; when empty the highest stored version is
+// returned. Reports false when nothing matches.
+//
+// Args:
+//
+//	name:    Executable name/key (e.g. "blender").
+//	version: Exact version to match, or "" for the highest available.
 //
 // Returns:
 //
-//	The executable and true if present, otherwise a zero Executable and false.
-func (s *Store) GetExecutable(name string) (Executable, bool) {
-	snap := s.Snapshot()
-	exe, ok := snap.Executables[name]
-	return exe, ok
+//	The executable and true if a match was found, otherwise a zero Executable
+//	and false.
+func (s *Store) GetExecutable(name, version string) (Executable, bool) {
+	list := s.Snapshot().Executables[name]
+	if len(list) == 0 {
+		return Executable{}, false
+	}
+	if version == "" {
+		return list[0], true // sorted highest-first
+	}
+	for _, e := range list {
+		if e.Version == version {
+			return e, true
+		}
+	}
+	return Executable{}, false
 }
 
-// DeleteExecutable removes a stored executable and bumps the revision if it
-// existed.
+// DeleteExecutable removes stored executables for name. When version is empty
+// every entry under name is removed; otherwise only the matching version. The
+// revision is bumped only when something was removed.
+//
+// Args:
+//
+//	name:    Executable name/key.
+//	version: Exact version to remove, or "" to remove all under name.
 //
 // Returns:
 //
 //	The published Snapshot and an error if persisting failed.
-func (s *Store) DeleteExecutable(name string) (Snapshot, error) {
+func (s *Store) DeleteExecutable(name, version string) (Snapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	vs := s.current()
-	if _, ok := vs.Executables[name]; !ok {
+	list, ok := vs.Executables[name]
+	if !ok {
 		return *s.cur.Load(), nil
 	}
-	delete(vs.Executables, name)
-	return s.commitLocked()
+	if version == "" {
+		delete(vs.Executables, name)
+		return s.commitLocked()
+	}
+	for i, e := range list {
+		if e.Version == version {
+			list = append(list[:i], list[i+1:]...)
+			if len(list) == 0 {
+				delete(vs.Executables, name)
+			} else {
+				vs.Executables[name] = list
+			}
+			return s.commitLocked()
+		}
+	}
+	return *s.cur.Load(), nil
 }
 
 // DeleteVariable removes a stored variable and bumps the revision if it existed.
@@ -458,7 +518,7 @@ func (s *Store) publish() {
 		snap.PluginVariables = map[string]map[string]string{}
 	}
 	if snap.Executables == nil {
-		snap.Executables = map[string]Executable{}
+		snap.Executables = map[string][]Executable{}
 	}
 	s.cur.Store(snap)
 }
@@ -549,20 +609,33 @@ func clonePluginMap(m map[string]map[string]string) map[string]map[string]string
 	return out
 }
 
-func cloneExecutableMap(m map[string]Executable) map[string]Executable {
+func cloneExecutableMap(m map[string][]Executable) map[string][]Executable {
 	if m == nil {
 		return nil
 	}
-	out := make(map[string]Executable, len(m))
-	for k, v := range m {
-		if v.Args != nil {
-			args := make([]string, len(v.Args))
-			copy(args, v.Args)
-			v.Args = args
+	out := make(map[string][]Executable, len(m))
+	for k, list := range m {
+		cp := make([]Executable, len(list))
+		for i, e := range list {
+			if e.Args != nil {
+				args := make([]string, len(e.Args))
+				copy(args, e.Args)
+				e.Args = args
+			}
+			cp[i] = e
 		}
-		out[k] = v
+		out[k] = cp
 	}
 	return out
+}
+
+// sortExecutables orders a name's executables highest-version-first (stable), so
+// GetExecutable with an empty version deterministically returns the newest.
+func sortExecutables(list []Executable) []Executable {
+	sort.SliceStable(list, func(i, j int) bool {
+		return compareVersions(list[i].Version, list[j].Version) > 0
+	})
+	return list
 }
 
 func executablesEqual(a, b Executable) bool {

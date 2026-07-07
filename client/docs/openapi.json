@@ -728,7 +728,7 @@
     },
     "/executable/get": {
       "get": {
-        "description": "Returns a single stored executable by the 'name' query parameter (e.g. name=blender). When the executable is not stored, responds 200 with an empty object ({}) so callers can branch on presence without treating absence as an error.\n\nQuery parameter: name (executable key, e.g. 'blender').",
+        "description": "Returns the stored executables for the 'name' query parameter (e.g. name=blender) as {\"name\":..., \"executables\":[...]}, highest version first. An optional 'version' query parameter filters to an exact match. An empty array means nothing is stored, so callers branch on presence without treating absence as an error.\n\nQuery parameters: name (executable key, e.g. 'blender'); version (optional exact version filter).",
         "operationId": "getExecutableHandler",
         "responses": {
           "200": {
@@ -741,7 +741,7 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Get a stored executable",
+        "summary": "Get stored executables",
         "tags": [
           "settings"
         ]
@@ -749,7 +749,7 @@
     },
     "/executable/list": {
       "get": {
-        "description": "Returns all executables the Client keeps on behalf of plugins (name -\u003e path/version/args), e.g. a registered Blender. The same data also rides along on every /report via the settings snapshot; this endpoint is a direct query.",
+        "description": "Returns all executables the Client keeps on behalf of plugins as name -\u003e list of {path, version, args}. Several versions can be stored under one name (e.g. multiple Blender versions), highest version first. The same data also rides along on every /report via the settings snapshot; this endpoint is a direct query.",
         "operationId": "listExecutablesHandler",
         "responses": {
           "200": {
@@ -770,7 +770,7 @@
     },
     "/executable/set": {
       "post": {
-        "description": "Registers or replaces a named executable (e.g. 'blender') with its path, optional version and default args. Bumps the settings revision and broadcasts to every connected plugin on their next /report poll. Lets one plugin (e.g. the Blender add-on) publish a Blender path that other plugins (e.g. Maya) can reuse — including as the fallback for /tools/run and /run_blender_script.",
+        "description": "Registers or replaces a named executable (e.g. 'blender') with its path, version and optional default args. Multiple versions can coexist under one name — an entry with the same (name, version) is replaced, otherwise appended. Bumps the settings revision and broadcasts to every connected plugin on their next /report poll. Lets one plugin (e.g. the Blender add-on) publish a Blender path that other plugins (e.g. Maya) can reuse — including as the fallback for /tools/run and /run_blender_script.",
         "operationId": "setExecutableHandler",
         "requestBody": {
           "content": {
@@ -2114,7 +2114,7 @@
     },
     "/v1.10/executable/get": {
       "get": {
-        "description": "Returns a single stored executable by the 'name' query parameter (e.g. name=blender). When the executable is not stored, responds 200 with an empty object ({}) so callers can branch on presence without treating absence as an error.\n\nQuery parameter: name (executable key, e.g. 'blender').",
+        "description": "Returns the stored executables for the 'name' query parameter (e.g. name=blender) as {\"name\":..., \"executables\":[...]}, highest version first. An optional 'version' query parameter filters to an exact match. An empty array means nothing is stored, so callers branch on presence without treating absence as an error.\n\nQuery parameters: name (executable key, e.g. 'blender'); version (optional exact version filter).",
         "operationId": "getExecutableHandler",
         "responses": {
           "200": {
@@ -2127,7 +2127,7 @@
             "description": "Internal server error."
           }
         },
-        "summary": "Get a stored executable",
+        "summary": "Get stored executables",
         "tags": [
           "settings"
         ]
@@ -2135,7 +2135,7 @@
     },
     "/v1.10/executable/list": {
       "get": {
-        "description": "Returns all executables the Client keeps on behalf of plugins (name -\u003e path/version/args), e.g. a registered Blender. The same data also rides along on every /report via the settings snapshot; this endpoint is a direct query.",
+        "description": "Returns all executables the Client keeps on behalf of plugins as name -\u003e list of {path, version, args}. Several versions can be stored under one name (e.g. multiple Blender versions), highest version first. The same data also rides along on every /report via the settings snapshot; this endpoint is a direct query.",
         "operationId": "listExecutablesHandler",
         "responses": {
           "200": {
@@ -2156,7 +2156,7 @@
     },
     "/v1.10/executable/set": {
       "post": {
-        "description": "Registers or replaces a named executable (e.g. 'blender') with its path, optional version and default args. Bumps the settings revision and broadcasts to every connected plugin on their next /report poll. Lets one plugin (e.g. the Blender add-on) publish a Blender path that other plugins (e.g. Maya) can reuse — including as the fallback for /tools/run and /run_blender_script.",
+        "description": "Registers or replaces a named executable (e.g. 'blender') with its path, version and optional default args. Multiple versions can coexist under one name — an entry with the same (name, version) is replaced, otherwise appended. Bumps the settings revision and broadcasts to every connected plugin on their next /report poll. Lets one plugin (e.g. the Blender add-on) publish a Blender path that other plugins (e.g. Maya) can reuse — including as the fallback for /tools/run and /run_blender_script.",
         "operationId": "setExecutableHandler",
         "requestBody": {
           "content": {

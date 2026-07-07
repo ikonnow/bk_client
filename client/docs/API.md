@@ -30,7 +30,7 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 | POST | `/settings/set` | ✓ |  | Change shared settings | `SetSettingsData` |
 | POST | `/settings/set_variable` | ✓ |  | Store a variable | `SetVariableData` |
 | GET | `/executable/list` | ✓ |  | List stored executables | — |
-| GET | `/executable/get` | ✓ |  | Get a stored executable | — |
+| GET | `/executable/get` | ✓ |  | Get stored executables | — |
 | POST | `/executable/set` | ✓ |  | Store an executable | `SetExecutableData` |
 
 ### login
@@ -198,22 +198,22 @@ Stores a free-form variable/value pair on behalf of a plugin. An empty 'plugin' 
 
 #### `GET /executable/list`
 
-Returns all executables the Client keeps on behalf of plugins (name -> path/version/args), e.g. a registered Blender. The same data also rides along on every /report via the settings snapshot; this endpoint is a direct query.
+Returns all executables the Client keeps on behalf of plugins as name -> list of {path, version, args}. Several versions can be stored under one name (e.g. multiple Blender versions), highest version first. The same data also rides along on every /report via the settings snapshot; this endpoint is a direct query.
 
 - **Handler:** `listExecutablesHandler`
 - **Versioned alias:** `/v1.10/executable/list`
 
 #### `GET /executable/get`
 
-Returns a single stored executable by the 'name' query parameter (e.g. name=blender). When the executable is not stored, responds 200 with an empty object ({}) so callers can branch on presence without treating absence as an error.
+Returns the stored executables for the 'name' query parameter (e.g. name=blender) as {"name":..., "executables":[...]}, highest version first. An optional 'version' query parameter filters to an exact match. An empty array means nothing is stored, so callers branch on presence without treating absence as an error.
 
 - **Handler:** `getExecutableHandler`
 - **Versioned alias:** `/v1.10/executable/get`
-- **Request notes:** Query parameter: name (executable key, e.g. 'blender').
+- **Request notes:** Query parameters: name (executable key, e.g. 'blender'); version (optional exact version filter).
 
 #### `POST /executable/set`
 
-Registers or replaces a named executable (e.g. 'blender') with its path, optional version and default args. Bumps the settings revision and broadcasts to every connected plugin on their next /report poll. Lets one plugin (e.g. the Blender add-on) publish a Blender path that other plugins (e.g. Maya) can reuse — including as the fallback for /tools/run and /run_blender_script.
+Registers or replaces a named executable (e.g. 'blender') with its path, version and optional default args. Multiple versions can coexist under one name — an entry with the same (name, version) is replaced, otherwise appended. Bumps the settings revision and broadcasts to every connected plugin on their next /report poll. Lets one plugin (e.g. the Blender add-on) publish a Blender path that other plugins (e.g. Maya) can reuse — including as the fallback for /tools/run and /run_blender_script.
 
 - **Handler:** `setExecutableHandler`
 - **Versioned alias:** `/v1.10/executable/set`

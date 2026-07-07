@@ -880,7 +880,10 @@ def _prepare_material_asset(asset_name: str = "", asset_id: str = "") -> bool:
             break
     if chosen is None and asset_id:
         for m in mats:
-            bk = getattr(m, "blenderkit", None)
+            # use new var first, then fallback to old-style blenderkit
+            bk = getattr(m, "blendkit", None)
+            if bk is None:
+                bk = getattr(m, "blenderkit", None)
             if bk is not None and getattr(bk, "id", "") == asset_id:
                 chosen = m
                 break

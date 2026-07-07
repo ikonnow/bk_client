@@ -131,12 +131,12 @@ def _run_py_tool(tool: str, tool_args: list[str]) -> int:
 
 # (GOOS, GOARCH, output filename) for every shipped platform.
 BUILD_TARGETS = [
-    ("windows", "amd64", "blenderkit-client-windows-x86_64.exe"),
-    ("windows", "arm64", "blenderkit-client-windows-arm64.exe"),
-    ("darwin", "amd64", "blenderkit-client-macos-x86_64"),
-    ("darwin", "arm64", "blenderkit-client-macos-arm64"),
-    ("linux", "amd64", "blenderkit-client-linux-x86_64"),
-    ("linux", "arm64", "blenderkit-client-linux-arm64"),
+    ("windows", "amd64", "bk_client-windows-x86_64.exe"),
+    ("windows", "arm64", "bk_client-windows-arm64.exe"),
+    ("darwin", "amd64", "bk_client-macos-x86_64"),
+    ("darwin", "arm64", "bk_client-macos-arm64"),
+    ("linux", "amd64", "bk_client-linux-x86_64"),
+    ("linux", "arm64", "bk_client-linux-arm64"),
 ]
 
 
@@ -204,7 +204,16 @@ def build(args):
         sys.exit(1)
     print(f"Blendkit-Client v{version} builds completed in {out_dir}.")
 
-    package(out_dir, version)
+    zip_path = package(out_dir, version)
+
+    # Ship only the bundle: the per-platform binaries are now inside
+    # bk_client.zip, so drop the loose copies and leave a single release
+    # artifact in the output directory.
+    for _goos, _goarch, output in BUILD_TARGETS:
+        bin_path = os.path.join(out_dir, output)
+        if os.path.isfile(bin_path):
+            os.remove(bin_path)
+    print(f"Release artifact: {zip_path}")
 
 
 def _collect_tools() -> list[dict]:
@@ -256,15 +265,18 @@ def _sha256(path: str) -> str:
 def package(out_dir: str, version: str) -> str:
     """Bundle binaries, tools, docs and metadata into a single release zip.
 
-    Produces ``<out_dir>/blenderkit-client-v<version>.zip`` containing every
-    built platform binary plus the bundled tools (already embedded in each
-    binary, but shipped raw so plugins can inspect them or point
-    BLENDKIT_TOOLS_DIR at them), the generated API docs, the VERSION file,
-    the tray icons and a machine-readable ``manifest.json`` (version, per-binary
-    sha256, and the tool list) for plugin CI to verify and select files.
+    Produces ``<out_dir>/bk_client.zip`` containing every built platform binary
+    plus the bundled tools (already embedded in each binary, but shipped raw so
+    plugins can inspect them or point BLENDKIT_TOOLS_DIR at them), the generated
+    API docs, the VERSION file, the tray icons and a machine-readable
+    ``manifest.json`` (version, per-binary sha256, and the tool list) for plugin
+    CI to verify and select files.
 
-    All zip members are nested under a ``blenderkit-client-v<version>/`` root
-    so extraction never litters the current directory.
+    The archive name and its internal root are intentionally version-free so the
+    download URL and extracted path stay stable across releases; the version
+    still lives inside via ``VERSION`` and ``manifest.json``. All members are
+    nested under a ``client/`` root so extraction never litters the current
+    directory.
 
     Args:
         out_dir: The directory holding the freshly built binaries (``<out>/v<version>``).
@@ -273,8 +285,8 @@ def package(out_dir: str, version: str) -> str:
     Returns:
         The path to the created zip file.
     """
-    root = f"blenderkit-client-v{version}"
-    zip_path = os.path.join(out_dir, root + ".zip")
+    root = "client"
+    zip_path = os.path.join(out_dir, "bk_client.zip")
 
     binaries = []
     for goos, goarch, output in BUILD_TARGETS:
@@ -293,7 +305,7 @@ def package(out_dir: str, version: str) -> str:
         )
 
     manifest = {
-        "name": "blenderkit-client",
+        "name": "bk_client",
         "version": version,
         "binaries": binaries,
         "tools": _collect_tools(),
@@ -380,7 +392,7 @@ def run(args):
             extra arguments forwarded to the Client.
     """
     version = read_client_version()
-    binary = "blenderkit-client-dev.exe" if os.name == "nt" else "blenderkit-client-dev"
+    binary = "bk_client-dev.exe" if os.name == "nt" else "bk_client-dev"
     binary_path = os.path.join(CLIENT_DIR, binary)
     ldflags = f"-X main.ClientVersion={version}"
 
@@ -451,12 +463,12 @@ def verify(args):
 
     Attributes:
         args: Parsed CLI arguments. Uses ``args.path`` as the directory holding
-            the ``blenderkit-client-*`` binaries to verify.
+            the ``bk_client-*`` binaries to verify.
     """
     binaries_path = args.path
     print("===== VERIFYING CLIENT BINARIES =====")
     signatures_ok = True
-    client_files = [f for f in os.listdir(binaries_path) if f.startswith("blenderkit-client")]
+    client_files = [f for f in os.listdir(binaries_path) if f.startswith("bk_client")]
     for file_name in client_files:
         print(f"\n\n==={file_name}")
         file_path = os.path.join(binaries_path, file_name)
@@ -658,7 +670,7 @@ def main():
     ).set_defaults(func=live)
 
     p_verify = sub.add_parser("verify", help="Verify signing/notarization of built binaries.")
-    p_verify.add_argument("path", help="Directory containing the blenderkit-client-* binaries.")
+    p_verify.add_argument("path", help="Directory containing the bk_client-* binaries.")
     p_verify.set_defaults(func=verify)
 
     sub.add_parser("test", help="Run Go unit tests and lint Python recipes.").set_defaults(func=test)

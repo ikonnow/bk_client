@@ -152,10 +152,12 @@ func listExecutablesHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// getExecutableHandler returns a single stored executable by name. The name is
-// taken from the "name" query parameter. When the executable is not stored it
-// returns 200 with an empty object ({}), so callers can branch on presence
-// without treating "absent" as an error.
+// getExecutableHandler returns the stored executables for a name. The name is
+// taken from the "name" query parameter; an optional "version" filters to an
+// exact match. The response is always {"name":..., "executables":[...]} — an
+// empty array means nothing is stored, so callers can branch on presence
+// (e.g. length) without treating absence as an error. Multiple entries are
+// returned highest-version-first when several versions share the name.
 func getExecutableHandler(w http.ResponseWriter, r *http.Request) {
 	if SettingsStore == nil {
 		http.Error(w, "Settings store not initialized", http.StatusServiceUnavailable)
@@ -166,14 +168,29 @@ func getExecutableHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing required query parameter: name", http.StatusBadRequest)
 		return
 	}
+	version := r.URL.Query().Get("version")
+
+	list := SettingsStore.GetExecutables(name)
+	if version != "" {
+		filtered := make([]settings.Executable, 0, 1)
+		for _, e := range list {
+			if e.Version == version {
+				filtered = append(filtered, e)
+			}
+		}
+		list = filtered
+	}
+	if list == nil {
+		list = []settings.Executable{}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Blendkit-Client-Version", ClientVersion)
 	w.WriteHeader(http.StatusOK)
-	if exe, ok := SettingsStore.GetExecutable(name); ok {
-		json.NewEncoder(w).Encode(exe)
-		return
-	}
-	w.Write([]byte("{}"))
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"name":        name,
+		"executables": list,
+	})
 }
 
 // setExecutableHandler stores (or replaces) a named executable, bumps the

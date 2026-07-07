@@ -5,6 +5,8 @@ client/v*.*.*
 client/client.exe
 client/blenderkit-client-dev
 client/blenderkit-client-dev.exe
+client/bk_client-dev
+client/bk_client-dev.exe
 __debug_bin.exe
 
 *-client-settings.json
