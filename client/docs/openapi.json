@@ -726,6 +726,81 @@
         ]
       }
     },
+    "/executable/get": {
+      "get": {
+        "description": "Returns the stored executables for the 'name' query parameter (e.g. name=blender) as {\"name\":..., \"executables\":[...]}, highest version first. An optional 'version' query parameter filters to an exact match. An empty array means nothing is stored, so callers branch on presence without treating absence as an error.\n\nQuery parameters: name (executable key, e.g. 'blender'); version (optional exact version filter).",
+        "operationId": "getExecutableHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get stored executables",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/executable/list": {
+      "get": {
+        "description": "Returns all executables the Client keeps on behalf of plugins as name -\u003e list of {path, version, args}. Several versions can be stored under one name (e.g. multiple Blender versions), highest version first. The same data also rides along on every /report via the settings snapshot; this endpoint is a direct query.",
+        "operationId": "listExecutablesHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List stored executables",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/executable/set": {
+      "post": {
+        "description": "Registers or replaces a named executable (e.g. 'blender') with its path, version and optional default args. Multiple versions can coexist under one name — an entry with the same (name, version) is replaced, otherwise appended. Bumps the settings revision and broadcasts to every connected plugin on their next /report poll. Lets one plugin (e.g. the Blender add-on) publish a Blender path that other plugins (e.g. Maya) can reuse — including as the fallback for /tools/run and /run_blender_script.",
+        "operationId": "setExecutableHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SetExecutableData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SetExecutableData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Store an executable",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/godot/report": {
       "post": {
         "description": "Polling endpoint for the Godot add-on. Subscribes the app on first call and returns a SoftwareResponse with the Client version, a connection message and pending tasks.",
@@ -1305,6 +1380,60 @@
         "summary": "Shut down the Client",
         "tags": [
           "core"
+        ]
+      }
+    },
+    "/tools/list": {
+      "get": {
+        "description": "Returns the recipes embedded in this Client binary, each with its optional parameter schema. Because the tools ship inside the binary, this list always matches exactly what /tools/run can execute. Plugins use it to discover available tools without hard-coding script IDs.",
+        "operationId": "listToolsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List bundled tools",
+        "tags": [
+          "host-agnostic"
+        ]
+      }
+    },
+    "/tools/run": {
+      "post": {
+        "description": "Canonical alias for /run_blender_script: runs a bundled recipe (script_id from /tools/list) under headless Blender, forwarding params as params.json. New callers should prefer this endpoint.",
+        "operationId": "runBlenderScriptHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `RunBlenderScriptData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "RunBlenderScriptData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Run a bundled tool",
+        "tags": [
+          "host-agnostic"
         ]
       }
     },
@@ -1983,6 +2112,81 @@
         ]
       }
     },
+    "/v1.10/executable/get": {
+      "get": {
+        "description": "Returns the stored executables for the 'name' query parameter (e.g. name=blender) as {\"name\":..., \"executables\":[...]}, highest version first. An optional 'version' query parameter filters to an exact match. An empty array means nothing is stored, so callers branch on presence without treating absence as an error.\n\nQuery parameters: name (executable key, e.g. 'blender'); version (optional exact version filter).",
+        "operationId": "getExecutableHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get stored executables",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/v1.10/executable/list": {
+      "get": {
+        "description": "Returns all executables the Client keeps on behalf of plugins as name -\u003e list of {path, version, args}. Several versions can be stored under one name (e.g. multiple Blender versions), highest version first. The same data also rides along on every /report via the settings snapshot; this endpoint is a direct query.",
+        "operationId": "listExecutablesHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List stored executables",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/v1.10/executable/set": {
+      "post": {
+        "description": "Registers or replaces a named executable (e.g. 'blender') with its path, version and optional default args. Multiple versions can coexist under one name — an entry with the same (name, version) is replaced, otherwise appended. Bumps the settings revision and broadcasts to every connected plugin on their next /report poll. Lets one plugin (e.g. the Blender add-on) publish a Blender path that other plugins (e.g. Maya) can reuse — including as the fallback for /tools/run and /run_blender_script.",
+        "operationId": "setExecutableHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SetExecutableData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SetExecutableData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Store an executable",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/v1.10/godot/report": {
       "post": {
         "description": "Polling endpoint for the Godot add-on. Subscribes the app on first call and returns a SoftwareResponse with the Client version, a connection message and pending tasks.",
@@ -2562,6 +2766,60 @@
         "summary": "Shut down the Client",
         "tags": [
           "core"
+        ]
+      }
+    },
+    "/v1.10/tools/list": {
+      "get": {
+        "description": "Returns the recipes embedded in this Client binary, each with its optional parameter schema. Because the tools ship inside the binary, this list always matches exactly what /tools/run can execute. Plugins use it to discover available tools without hard-coding script IDs.",
+        "operationId": "listToolsHandler",
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List bundled tools",
+        "tags": [
+          "host-agnostic"
+        ]
+      }
+    },
+    "/v1.10/tools/run": {
+      "post": {
+        "description": "Canonical alias for /run_blender_script: runs a bundled recipe (script_id from /tools/list) under headless Blender, forwarding params as params.json. New callers should prefer this endpoint.",
+        "operationId": "runBlenderScriptHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `RunBlenderScriptData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "RunBlenderScriptData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Run a bundled tool",
+        "tags": [
+          "host-agnostic"
         ]
       }
     },

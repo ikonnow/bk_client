@@ -37,7 +37,7 @@ var instanceLock *flock.Flock
 // is keyed by ClientVersion so that different versions can run concurrently while
 // two instances of the *same* version cannot.
 func instanceLockPath() string {
-	return filepath.Join(os.TempDir(), "blenderkit-client", "v"+ClientVersion, "client.lock")
+	return filepath.Join(os.TempDir(), "bk_client", "v"+ClientVersion, "client.lock")
 }
 
 // instancePIDPath returns the sidecar file in which the lock holder records its

@@ -367,6 +367,16 @@ func main() {
 	mux.HandleFunc("/settings/set_variable", setVariableHandler)
 	mux.HandleFunc("/"+vapi+"/settings/set_variable", setVariableHandler)
 
+	// EXECUTABLES - Client-stored external programs (e.g. Blender) that any
+	// plugin can register once and every other plugin can reuse. Ride along on
+	// the settings Snapshot too, so they also sync on every /report.
+	mux.HandleFunc("/executable/list", listExecutablesHandler)
+	mux.HandleFunc("/"+vapi+"/executable/list", listExecutablesHandler)
+	mux.HandleFunc("/executable/get", getExecutableHandler)
+	mux.HandleFunc("/"+vapi+"/executable/get", getExecutableHandler)
+	mux.HandleFunc("/executable/set", setExecutableHandler)
+	mux.HandleFunc("/"+vapi+"/executable/set", setExecutableHandler)
+
 	// LOGIN
 	mux.HandleFunc("/consumer/exchange/", consumerExchangeHandler) // does not use /vX.Y/ to keep stuff simple on server side
 	mux.HandleFunc("/refresh_token", RefreshTokenHandler)
@@ -400,6 +410,14 @@ func main() {
 	// available for the add-on's own future bg-script migrations.
 	mux.HandleFunc("/run_blender_script", runBlenderScriptHandler)
 	mux.HandleFunc("/"+vapi+"/run_blender_script", runBlenderScriptHandler)
+
+	// HOST-AGNOSTIC: bundled-tool discovery + execution. /tools/list
+	// enumerates the recipes embedded in this binary; /tools/run is the
+	// canonical alias for /run_blender_script (same handler/body).
+	mux.HandleFunc("/tools/list", listToolsHandler)
+	mux.HandleFunc("/"+vapi+"/tools/list", listToolsHandler)
+	mux.HandleFunc("/tools/run", runBlenderScriptHandler)
+	mux.HandleFunc("/"+vapi+"/tools/run", runBlenderScriptHandler)
 
 	// API HANDLERS
 	mux.HandleFunc("/profiles/download_gravatar_image", DownloadGravatarImageHandler)

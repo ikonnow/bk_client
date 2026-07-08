@@ -1,0 +1,25 @@
+{
+  "name": "Export USD",
+  "description": "Opens a downloaded Blendkit .blend, unpacks its packed textures, flattens shader node groups and exports a self-contained UsdPreviewSurface .usd file.",
+  "software": "blender",
+  "params": [
+    {
+      "name": "blend_path",
+      "type": "string",
+      "required": true,
+      "description": "Input .blend file to open."
+    },
+    {
+      "name": "out_usd",
+      "type": "string",
+      "required": true,
+      "description": "Destination .usd path."
+    },
+    {
+      "name": "max_resolution",
+      "type": "string",
+      "default": "ORIGINAL",
+      "description": "Texture resolution cap: 512/1024/2048/4096/8192/ORIGINAL. Picks the textures subfolder suffix."
+    }
+  ]
+}

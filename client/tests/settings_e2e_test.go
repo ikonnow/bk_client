@@ -67,7 +67,7 @@ func TestMain(m *testing.M) {
 // setup builds and launches the Client.
 func setup() error {
 	var err error
-	tempDir, err = os.MkdirTemp("", "blendkit-client-e2e-*")
+	tempDir, err = os.MkdirTemp("", "bk_client-e2e-*")
 	if err != nil {
 		return fmt.Errorf("creating temp dir: %w", err)
 	}
@@ -78,7 +78,7 @@ func setup() error {
 	}
 	clientDir := filepath.Dir(wd) // .../client (parent of .../client/tests)
 
-	exeName := "blendkit-client-e2e"
+	exeName := "bk_client-e2e"
 	if runtime.GOOS == "windows" {
 		exeName += ".exe"
 	}
@@ -98,7 +98,7 @@ func setup() error {
 	}
 	baseURL = "http://localhost:" + port
 
-	settingsPath := filepath.Join(tempDir, "settings.json")
+	settingsPath := filepath.Join(tempDir, "bk_client-settings.json")
 
 	// Pass --version so the Client is treated as add-on-spawned (not standalone):
 	// no system tray, no single-instance guard, and it listens headlessly.

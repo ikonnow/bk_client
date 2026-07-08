@@ -119,6 +119,27 @@ func Routes() []Route {
 			Handler:     "setVariableHandler", RequestType: "SetVariableData",
 		},
 
+		// EXECUTABLES - Client-stored external programs any plugin can reuse.
+		{
+			Path: "/executable/list", Methods: []string{"GET"}, Versioned: true, Tag: "settings",
+			Summary:     "List stored executables",
+			Description: "Returns all executables the Client keeps on behalf of plugins as name -> list of {path, version, args}. Several versions can be stored under one name (e.g. multiple Blender versions), highest version first. The same data also rides along on every /report via the settings snapshot; this endpoint is a direct query.",
+			Handler:     "listExecutablesHandler",
+		},
+		{
+			Path: "/executable/get", Methods: []string{"GET"}, Versioned: true, Tag: "settings",
+			Summary:     "Get stored executables",
+			Description: "Returns the stored executables for the 'name' query parameter (e.g. name=blender) as {\"name\":..., \"executables\":[...]}, highest version first. An optional 'version' query parameter filters to an exact match. An empty array means nothing is stored, so callers branch on presence without treating absence as an error.",
+			Handler:     "getExecutableHandler",
+			RequestNote: "Query parameters: name (executable key, e.g. 'blender'); version (optional exact version filter).",
+		},
+		{
+			Path: "/executable/set", Methods: []string{"POST"}, Versioned: true, Tag: "settings",
+			Summary:     "Store an executable",
+			Description: "Registers or replaces a named executable (e.g. 'blender') with its path, version and optional default args. Multiple versions can coexist under one name — an entry with the same (name, version) is replaced, otherwise appended. Bumps the settings revision and broadcasts to every connected plugin on their next /report poll. Lets one plugin (e.g. the Blender add-on) publish a Blender path that other plugins (e.g. Maya) can reuse — including as the fallback for /tools/run and /run_blender_script.",
+			Handler:     "setExecutableHandler", RequestType: "SetExecutableData",
+		},
+
 		// LOGIN / OAUTH2
 		{
 			Path: "/consumer/exchange/", Methods: []string{"GET"}, Versioned: false, Tag: "login",
@@ -199,6 +220,18 @@ func Routes() []Route {
 			Path: "/run_blender_script", Methods: []string{"POST"}, Versioned: true, Tag: "host-agnostic",
 			Summary:     "Run a Python recipe in headless Blender",
 			Description: "Runs a Python recipe under headless Blender. Used by external embedders (e.g. the Rhino plug-in) and available for the add-on's own background-script needs.",
+			Handler:     "runBlenderScriptHandler", RequestType: "RunBlenderScriptData",
+		},
+		{
+			Path: "/tools/list", Methods: []string{"GET"}, Versioned: true, Tag: "host-agnostic",
+			Summary:     "List bundled tools",
+			Description: "Returns the recipes embedded in this Client binary, each with its optional parameter schema. Because the tools ship inside the binary, this list always matches exactly what /tools/run can execute. Plugins use it to discover available tools without hard-coding script IDs.",
+			Handler:     "listToolsHandler",
+		},
+		{
+			Path: "/tools/run", Methods: []string{"POST"}, Versioned: true, Tag: "host-agnostic",
+			Summary:     "Run a bundled tool",
+			Description: "Canonical alias for /run_blender_script: runs a bundled recipe (script_id from /tools/list) under headless Blender, forwarding params as params.json. New callers should prefer this endpoint.",
 			Handler:     "runBlenderScriptHandler", RequestType: "RunBlenderScriptData",
 		},
 
