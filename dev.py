@@ -35,6 +35,8 @@ Commands:
     docs    Regenerate the API documentation (go generate).
 """
 
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
@@ -167,13 +169,13 @@ def read_client_version() -> str:
         return f.read().strip()
 
 
-def build(args):
+def build(args: argparse.Namespace) -> None:
     """Cross-compile the Client for all supported platforms.
 
     Binaries are written to ``<out>/v<version>/`` so the directory name matches
     the format expected by the add-on repos' ``copy_client_binaries`` step.
 
-    Attributes:
+    Args:
         args: Parsed CLI arguments. Uses ``args.out`` as the output directory.
     """
     version = read_client_version()
@@ -358,7 +360,12 @@ def _write_release_zip(zip_path: str, root: str, out_dir: str, binaries: list[di
         zf.writestr(f"{prefix}manifest.json", json.dumps(manifest, indent=2) + "\n")
 
 
-def _add_dir_to_zip(zf: zipfile.ZipFile, src_dir: str, arc_dir: str, keep=None) -> None:
+def _add_dir_to_zip(
+    zf: zipfile.ZipFile,
+    src_dir: str,
+    arc_dir: str,
+    keep: Callable[[str], bool] | None = None,
+) -> None:
     """Add the top-level files of *src_dir* to *zf* under *arc_dir*.
 
     Args:
@@ -377,7 +384,7 @@ def _add_dir_to_zip(zf: zipfile.ZipFile, src_dir: str, arc_dir: str, keep=None) 
             zf.write(path, f"{arc_dir}/{name}")
 
 
-def run(args):
+def run(args: argparse.Namespace) -> None:
     """Build the Client for the current platform and run it standalone.
 
     Compiles a development binary into ``client/`` (gitignored) with the real
@@ -433,7 +440,7 @@ def run(args):
     sys.exit(run_proc.returncode or 0)
 
 
-def live(args):
+def live(args: argparse.Namespace) -> None:
     """Run the Go live integration tests against a real Blendkit server.
 
     Loads credentials from the gitignored .env (API_KEY / BLENDKIT_SERVER),
@@ -456,14 +463,14 @@ def live(args):
     sys.exit(proc.returncode or 0)
 
 
-def verify(args):
+def verify(args: argparse.Namespace) -> None:
     """Verify code-signing/notarization of built Client binaries.
 
     - On Windows binaries, osslsigncode must be on PATH
       (https://github.com/mtrojnar/osslsigncode).
     - On macOS binaries, codesign and spctl are used.
 
-    Attributes:
+    Args:
         args: Parsed CLI arguments. Uses ``args.path`` as the directory holding
             the ``bk_client-*`` binaries to verify.
     """
@@ -496,7 +503,7 @@ def verify(args):
 def _verify_windows(file_path: str) -> bool:
     """Verify the Authenticode signature of a Windows Client binary.
 
-    Attributes:
+    Args:
         file_path: Path to the .exe binary to verify.
 
     Returns:
@@ -526,7 +533,7 @@ def _verify_windows(file_path: str) -> bool:
 def _verify_macos(file_path: str) -> bool:
     """Verify codesigning and notarization of a macOS Client binary.
 
-    Attributes:
+    Args:
         file_path: Path to the macOS binary to verify.
 
     Returns:
@@ -582,7 +589,7 @@ def lint_python(*, fix: bool) -> bool:
     Runs ruff and pydoclint against client/tools. Linting the recipes keeps the
     background scripts consistent and well-documented.
 
-    Attributes:
+    Args:
         fix: When True, run ruff in formatting/auto-fix mode instead of
             check-only mode.
 
@@ -604,10 +611,10 @@ def lint_python(*, fix: bool) -> bool:
     return ok
 
 
-def test(args):
+def test(args: argparse.Namespace) -> None:
     """Run Go unit tests and lint the Python recipes.
 
-    Attributes:
+    Args:
         args: Parsed CLI arguments (unused).
     """
     run_go_tests()
@@ -615,30 +622,30 @@ def test(args):
         sys.exit(1)
 
 
-def lint(args):
+def lint(args: argparse.Namespace) -> None:
     """Lint the Python recipes without writing changes.
 
-    Attributes:
+    Args:
         args: Parsed CLI arguments (unused).
     """
     if not lint_python(fix=False):
         sys.exit(1)
 
 
-def format_code(args):
+def format_code(args: argparse.Namespace) -> None:
     """Format and auto-fix the Python recipes with ruff.
 
-    Attributes:
+    Args:
         args: Parsed CLI arguments (unused).
     """
     if not lint_python(fix=True):
         sys.exit(1)
 
 
-def docs(args):
+def docs(args: argparse.Namespace) -> None:
     """Regenerate the API documentation via ``go generate``.
 
-    Attributes:
+    Args:
         args: Parsed CLI arguments (unused).
     """
     print("=== Regenerating API documentation (go generate) ===")

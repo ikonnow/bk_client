@@ -8,9 +8,23 @@
 
     // The Python here is only the dev.py helper and the client/tools recipes,
     // linted/formatted with ruff via uv (see pyproject.toml).
+    "python.terminal.activateEnvironment": false,
+    "python.terminal.shellIntegration.enabled": false,
+
+    "python.analysis.typeEvaluation.deprecateTypingAliases": true,
+    "python.analysis.typeEvaluation.enableTypeIgnoreComments": true,
+    "python.analysis.typeEvaluation.strictParameterNoneValue": true,
+
+    "python.analysis.autoFormatStrings": true,
+
+    "ruff.enable": true,
+    
     "[python]": {
         "editor.defaultFormatter": "charliermarsh.ruff",
-        "editor.formatOnSave": true
+        "editor.formatOnSave": true,
+        "editor.formatOnPaste": true,
+        "editor.formatOnType": true,
+        "editor.renderFinalNewline": "on"
     },
 
     "cSpell.words": [
