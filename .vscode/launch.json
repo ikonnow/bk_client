@@ -3,6 +3,24 @@
     // "Run/Debug/Test Client" require the Go extension (golang.go) and Delve.
     "version": "0.2.0",
     "configurations": [
+
+        {
+            "name": "Run Project Setup",
+            "type": "node",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "windows": {
+                "runtimeExecutable": "${workspaceFolder}/.vscode/pdm_setup_project.bat",
+            },
+            "linux": {
+                "runtimeExecutable": "${workspaceFolder}/.vscode/pdm_setup_project.sh",
+            },
+            "osx": {
+                "runtimeExecutable": "${workspaceFolder}/.vscode/pdm_setup_project.sh",
+            }
+        },
+        
         {
             // Build the Client from source and run it standalone (no DCC).
             // Add flags under "args", e.g. ["--port", "62000", "--server", "https://devel.blendkit.com"].
@@ -71,5 +89,91 @@
                 "build"
             ]
         }
+
+        {
+            "name": "[RUFF] Check All",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "ruff",
+            "args": [
+                "check",
+                "."
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "windows": {
+                "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            },
+            "linux": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            },
+            "osx": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            }
+        },
+
+        {
+            "name": "[RUFF] Fix All",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "ruff",
+            "args": [
+                "fix",
+                "."
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "windows": {
+                "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            },
+            "linux": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            },
+            "osx": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            }
+        },
+
+        {
+            "name": "[BANDIT] Check All",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "bandit",
+            "args": [
+                "-c", "_bandit.yaml",
+                "-ll",
+                "-r", ".",
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "windows": {
+                "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            },
+            "linux": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            },
+            "osx": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            }
+        },
+
+        {
+            "name": "[PYDOCS] Check All",
+            "type": "node",
+            "request": "launch",
+            "args": ["."],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+
+            "windows": {
+                "runtimeExecutable": "${workspaceFolder}/.venv/Scripts/pydoclint.exe",
+            },
+            "linux": {
+                "runtimeExecutable": "${workspaceFolder}/.venv/bin/pydoclint",
+            },
+            "osx": {
+                "runtimeExecutable": "${workspaceFolder}/.venv/bin/pydoclint",
+            }
+        },
     ]
 }
