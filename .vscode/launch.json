@@ -96,7 +96,9 @@
             "request": "launch",
             "module": "ruff",
             "args": [
-                "check",
+                "format",
+                "--check",
+                "--diff",
                 "."
             ],
             "console": "integratedTerminal",
@@ -118,7 +120,7 @@
             "request": "launch",
             "module": "ruff",
             "args": [
-                "fix",
+                "format",
                 "."
             ],
             "console": "integratedTerminal",
