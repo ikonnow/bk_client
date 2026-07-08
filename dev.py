@@ -152,7 +152,9 @@ def _kill_existing_dev_clients(binary: str) -> None:
         binary: The dev binary file name to terminate.
     """
     if os.name == "nt":
-        subprocess.run(["taskkill", "/F", "/IM", binary], capture_output=True, check=False)
+        subprocess.run(
+            ["taskkill", "/F", "/IM", binary], capture_output=True, check=False
+        )
     else:
         subprocess.run(["pkill", "-f", binary], capture_output=True, check=False)
 
@@ -272,11 +274,10 @@ def package(out_dir: str, version: str) -> str:
     ``manifest.json`` (version, per-binary sha256, and the tool list) for plugin
     CI to verify and select files.
 
-    The archive name and its internal root are intentionally version-free so the
-    download URL and extracted path stay stable across releases; the version
-    still lives inside via ``VERSION`` and ``manifest.json``. All members are
-    nested under a ``client/`` root so extraction never litters the current
-    directory.
+    The archive name is intentionally version-free so the download URL stays
+    stable across releases; the version still lives inside via ``VERSION`` and
+    ``manifest.json``. All members sit at the archive root (no wrapping
+    ``client/`` folder).
 
     Args:
         out_dir: The directory holding the freshly built binaries (``<out>/v<version>``).
@@ -285,7 +286,7 @@ def package(out_dir: str, version: str) -> str:
     Returns:
         The path to the created zip file.
     """
-    root = "client"
+    root = ""
     zip_path = os.path.join(out_dir, "bk_client.zip")
 
     binaries = []
@@ -317,14 +318,17 @@ def package(out_dir: str, version: str) -> str:
     return zip_path
 
 
-def _write_release_zip(zip_path: str, root: str, out_dir: str, binaries: list[dict], manifest: dict) -> None:
+def _write_release_zip(
+    zip_path: str, root: str, out_dir: str, binaries: list[dict], manifest: dict
+) -> None:
     """Write the release zip with binaries, tools, docs, icons and manifest.
 
-    Every member is nested under *root*/ so extraction stays tidy.
+    Members are nested under *root*/ when *root* is non-empty; pass an empty
+    string to place them at the archive root.
 
     Args:
         zip_path: Destination path for the zip archive.
-        root: The top-level directory name inside the archive.
+        root: The top-level directory name inside the archive ("" for none).
         out_dir: Directory holding the built binaries.
         binaries: Binary descriptors (from :func:`package`) whose ``filename`` is zipped.
         manifest: The machine-readable manifest dict serialised to ``manifest.json``.
@@ -333,27 +337,31 @@ def _write_release_zip(zip_path: str, root: str, out_dir: str, binaries: list[di
     def _keep_tool(name: str) -> bool:
         return not name.startswith("__") and name.endswith((".py", ".json"))
 
+    prefix = f"{root}/" if root else ""
+
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         # Platform binaries.
         for entry in binaries:
-            zf.write(os.path.join(out_dir, entry["filename"]), f"{root}/{entry['filename']}")
+            zf.write(
+                os.path.join(out_dir, entry["filename"]), f"{prefix}{entry['filename']}"
+            )
 
         # Bundled recipes + their manifests (skip caches/helpers).
-        _add_dir_to_zip(zf, TOOLS_DIR, f"{root}/tools", _keep_tool)
+        _add_dir_to_zip(zf, TOOLS_DIR, f"{prefix}tools", _keep_tool)
 
         # Generated API docs.
         for doc in ("API.md", "openapi.json"):
             doc_path = os.path.join(DOCS_DIR, doc)
             if os.path.isfile(doc_path):
-                zf.write(doc_path, f"{root}/docs/{doc}")
+                zf.write(doc_path, f"{prefix}docs/{doc}")
 
         # Tray icons / logos.
-        _add_dir_to_zip(zf, ICONS_DIR, f"{root}/icons")
+        _add_dir_to_zip(zf, ICONS_DIR, f"{prefix}icons")
 
         # Plain-text version + machine-readable manifest.
         if os.path.isfile(VERSION_FILE):
-            zf.write(VERSION_FILE, f"{root}/VERSION")
-        zf.writestr(f"{root}/manifest.json", json.dumps(manifest, indent=2) + "\n")
+            zf.write(VERSION_FILE, f"{prefix}VERSION")
+        zf.writestr(f"{prefix}manifest.json", json.dumps(manifest, indent=2) + "\n")
 
 
 def _add_dir_to_zip(zf: zipfile.ZipFile, src_dir: str, arc_dir: str, keep=None) -> None:
@@ -652,11 +660,17 @@ def main():
     parser = argparse.ArgumentParser(description="Blendkit-Client developer helper.")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_build = sub.add_parser("build", help="Cross-compile the Client for all platforms.")
-    p_build.add_argument("--out", default="out", help="Output directory (default: ./out).")
+    p_build = sub.add_parser(
+        "build", help="Cross-compile the Client for all platforms."
+    )
+    p_build.add_argument(
+        "--out", default="out", help="Output directory (default: ./out)."
+    )
     p_build.set_defaults(func=build)
 
-    p_run = sub.add_parser("run", help="Build for the current platform and run the Client standalone.")
+    p_run = sub.add_parser(
+        "run", help="Build for the current platform and run the Client standalone."
+    )
     p_run.add_argument(
         "client_args",
         nargs=argparse.REMAINDER,
@@ -669,14 +683,24 @@ def main():
         help="Run live integration tests against a real server (creds from .env).",
     ).set_defaults(func=live)
 
-    p_verify = sub.add_parser("verify", help="Verify signing/notarization of built binaries.")
+    p_verify = sub.add_parser(
+        "verify", help="Verify signing/notarization of built binaries."
+    )
     p_verify.add_argument("path", help="Directory containing the bk_client-* binaries.")
     p_verify.set_defaults(func=verify)
 
-    sub.add_parser("test", help="Run Go unit tests and lint Python recipes.").set_defaults(func=test)
-    sub.add_parser("lint", help="Lint Python recipes (ruff + pydoclint).").set_defaults(func=lint)
-    sub.add_parser("format", help="Format/auto-fix Python recipes with ruff.").set_defaults(func=format_code)
-    sub.add_parser("docs", help="Regenerate API documentation (go generate).").set_defaults(func=docs)
+    sub.add_parser(
+        "test", help="Run Go unit tests and lint Python recipes."
+    ).set_defaults(func=test)
+    sub.add_parser("lint", help="Lint Python recipes (ruff + pydoclint).").set_defaults(
+        func=lint
+    )
+    sub.add_parser(
+        "format", help="Format/auto-fix Python recipes with ruff."
+    ).set_defaults(func=format_code)
+    sub.add_parser(
+        "docs", help="Regenerate API documentation (go generate)."
+    ).set_defaults(func=docs)
 
     args = parser.parse_args()
     args.func(args)
