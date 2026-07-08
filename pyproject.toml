@@ -8,9 +8,9 @@ dependencies = []
 # these are not part of any distribution - dev tooling only
 [dependency-groups]
 dev = [
-    "bandit>=1.9.4",
-    "ruff>=0.15.6",
-    "pydoclint>=0.8.3",
+    "bandit==1.9.4",
+    "ruff==0.15.20",
+    "pydoclint==0.9.1",
 ]
 
 

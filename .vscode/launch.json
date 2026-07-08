@@ -20,7 +20,7 @@
                 "runtimeExecutable": "${workspaceFolder}/.vscode/pdm_setup_project.sh",
             }
         },
-        
+
         {
             // Build the Client from source and run it standalone (no DCC).
             // Add flags under "args", e.g. ["--port", "62000", "--server", "https://devel.blendkit.com"].
@@ -88,7 +88,7 @@
             "args": [
                 "build"
             ]
-        }
+        },
 
         {
             "name": "[RUFF] Check All",
