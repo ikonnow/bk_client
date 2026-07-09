@@ -15,6 +15,9 @@ client_builds
 .mypy_cache
 .venv
 .pdm-python
+pdm.lock
+
+*.egg-info
 
 .ruff_cache
 
