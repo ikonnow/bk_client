@@ -45,6 +45,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from collections.abc import Callable
 
 CLIENT_DIR = "client"
 TOOLS_DIR = os.path.join(CLIENT_DIR, "tools")
