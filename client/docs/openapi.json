@@ -1,11 +1,11 @@
 {
   "info": {
-    "description": "Local HTTP API exposed by the Blendkit-Client (formerly daemon). The Client runs on localhost and bridges Blendkit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the Blendkit web service.\n\nMost endpoints are registered twice: once under the bare path (e.g. `/report`) and once under the versioned prefix (e.g. `/v1.10/report`). Both are equivalent.\n\nThis document is generated from the Go route registry in `internal/apispec` by `cmd/apidocgen`. Do not edit it by hand.",
+    "description": "Local HTTP API exposed by the Blendkit-Client (formerly daemon). The Client runs on localhost and bridges Blendkit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the Blendkit web service.\n\nMost endpoints are registered twice: once under the bare path (e.g. `/report`) and once under the versioned prefix (e.g. `/v1.11/report`). Both are equivalent.\n\nThis document is generated from the Go route registry in `internal/apispec` by `cmd/apidocgen`. Do not edit it by hand.",
     "license": {
       "name": "GPL-2.0-or-later"
     },
     "title": "Blendkit-Client API",
-    "version": "1.10.0"
+    "version": "1.11.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1437,7 +1437,7 @@
         ]
       }
     },
-    "/v1.10/addons/list": {
+    "/v1.11/addons/list": {
       "get": {
         "description": "Returns the Client version and the list of currently subscribed softwares/plugins (Blender, Godot, embedders). Host-agnostic and not CORS-gated, unlike /bkclientjs/status.",
         "operationId": "listAddonsHandler",
@@ -1477,7 +1477,7 @@
         ]
       }
     },
-    "/v1.10/addons/unsubscribe": {
+    "/v1.11/addons/unsubscribe": {
       "post": {
         "description": "Cancels all running tasks for the calling app and removes it from the Client's task registry. Host-agnostic: works for any subscribed software (Blender, Godot, embedders).",
         "operationId": "unsubscribeAddonHandler",
@@ -1510,7 +1510,7 @@
         ]
       }
     },
-    "/v1.10/assets/cancel_download": {
+    "/v1.11/assets/cancel_download": {
       "post": {
         "description": "Cancels an in-progress asset download task.",
         "operationId": "CancelDownloadHandler",
@@ -1543,7 +1543,7 @@
         ]
       }
     },
-    "/v1.10/assets/download": {
+    "/v1.11/assets/download": {
       "post": {
         "description": "Starts an asynchronous asset download. Progress and result are reported back through /report tasks.",
         "operationId": "assetDownloadHandler",
@@ -1576,7 +1576,7 @@
         ]
       }
     },
-    "/v1.10/assets/download_prxc": {
+    "/v1.11/assets/download_prxc": {
       "post": {
         "description": "Starts an asynchronous download of a proxy collection (prxc) asset.\n\nBody embeds DownloadPrxcData plus an app_id field.",
         "operationId": "assetPrxcDownloadHandler",
@@ -1609,7 +1609,7 @@
         ]
       }
     },
-    "/v1.10/assets/search": {
+    "/v1.11/assets/search": {
       "post": {
         "description": "Starts an asynchronous asset search. Results, including thumbnail downloads, are reported back through /report tasks.",
         "operationId": "assetSearchHandler",
@@ -1642,7 +1642,7 @@
         ]
       }
     },
-    "/v1.10/assets/upload": {
+    "/v1.11/assets/upload": {
       "post": {
         "description": "Starts an asynchronous asset upload. Progress and result are reported back through /report tasks.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "assetUploadHandler",
@@ -1676,7 +1676,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/bkclientjs/get_asset": {
+    "/v1.11/bkclientjs/get_asset": {
       "post": {
         "description": "CORS-enabled endpoint used by bkclient.js to ask a connected software to download an asset. Supports OPTIONS preflight.",
         "operationId": "bkclientjsGetAssetHandler",
@@ -1709,7 +1709,7 @@
         ]
       }
     },
-    "/v1.10/bkclientjs/status": {
+    "/v1.11/bkclientjs/status": {
       "get": {
         "description": "CORS-enabled endpoint used by bkclient.js in the web browser to read the Client version and the list of connected softwares. Supports OPTIONS preflight.",
         "operationId": "bkclientjsStatusHandler",
@@ -1730,7 +1730,7 @@
         ]
       }
     },
-    "/v1.10/blender/asset_download": {
+    "/v1.11/blender/asset_download": {
       "post": {
         "deprecated": true,
         "description": "Deprecated alias of /assets/download. Kept for backward compatibility with existing Blender add-ons.",
@@ -1764,7 +1764,7 @@
         ]
       }
     },
-    "/v1.10/blender/asset_prxc_download": {
+    "/v1.11/blender/asset_prxc_download": {
       "post": {
         "deprecated": true,
         "description": "Deprecated alias of /assets/download_prxc. Kept for backward compatibility with existing Blender add-ons.\n\nBody embeds DownloadPrxcData plus an app_id field.",
@@ -1798,7 +1798,7 @@
         ]
       }
     },
-    "/v1.10/blender/asset_search": {
+    "/v1.11/blender/asset_search": {
       "post": {
         "deprecated": true,
         "description": "Deprecated alias of /assets/search. Kept for backward compatibility with existing Blender add-ons.",
@@ -1832,7 +1832,7 @@
         ]
       }
     },
-    "/v1.10/blender/asset_upload": {
+    "/v1.11/blender/asset_upload": {
       "post": {
         "deprecated": true,
         "description": "Deprecated alias of /assets/upload. Kept for backward compatibility with existing Blender add-ons.\n\nRequires a logged-in Blendkit API key.",
@@ -1867,7 +1867,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/blender/cancel_download": {
+    "/v1.11/blender/cancel_download": {
       "post": {
         "deprecated": true,
         "description": "Deprecated alias of /assets/cancel_download. Kept for backward compatibility with existing Blender add-ons.",
@@ -1901,7 +1901,7 @@
         ]
       }
     },
-    "/v1.10/blender/unsubscribe_addon": {
+    "/v1.11/blender/unsubscribe_addon": {
       "post": {
         "deprecated": true,
         "description": "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Blender add-ons.",
@@ -1935,7 +1935,7 @@
         ]
       }
     },
-    "/v1.10/comments/create_comment": {
+    "/v1.11/comments/create_comment": {
       "post": {
         "description": "Posts a new comment (or reply) on an asset.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "CreateCommentHandler",
@@ -1969,7 +1969,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/comments/feedback_comment": {
+    "/v1.11/comments/feedback_comment": {
       "post": {
         "description": "Sends feedback (like or dislike) on a comment.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "FeedbackCommentHandler",
@@ -2003,7 +2003,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/comments/get_comments": {
+    "/v1.11/comments/get_comments": {
       "post": {
         "description": "Fetches comments for an asset.",
         "operationId": "GetCommentsHandler",
@@ -2036,7 +2036,7 @@
         ]
       }
     },
-    "/v1.10/comments/mark_comment_private": {
+    "/v1.11/comments/mark_comment_private": {
       "post": {
         "description": "Marks a comment as private or public.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "MarkCommentPrivateHandler",
@@ -2070,7 +2070,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/debug": {
+    "/v1.11/debug": {
       "get": {
         "description": "Returns diagnostic information about the Client's network configuration, useful for troubleshooting connectivity and proxy issues.",
         "operationId": "DebugNetworkHandler",
@@ -2091,7 +2091,7 @@
         ]
       }
     },
-    "/v1.10/dev": {
+    "/v1.11/dev": {
       "get": {
         "description": "Serves a self-contained, same-origin HTML page with buttons to call the Client's endpoints and view their raw JSON responses. Because it is served by the Client itself, requests are same-origin and the settings endpoints (which emit no CORS headers) work directly from the browser. Manual-testing aid, not a production UI.",
         "operationId": "devDashboardHandler",
@@ -2112,7 +2112,7 @@
         ]
       }
     },
-    "/v1.10/executable/get": {
+    "/v1.11/executable/get": {
       "get": {
         "description": "Returns the stored executables for the 'name' query parameter (e.g. name=blender) as {\"name\":..., \"executables\":[...]}, highest version first. An optional 'version' query parameter filters to an exact match. An empty array means nothing is stored, so callers branch on presence without treating absence as an error.\n\nQuery parameters: name (executable key, e.g. 'blender'); version (optional exact version filter).",
         "operationId": "getExecutableHandler",
@@ -2133,7 +2133,7 @@
         ]
       }
     },
-    "/v1.10/executable/list": {
+    "/v1.11/executable/list": {
       "get": {
         "description": "Returns all executables the Client keeps on behalf of plugins as name -\u003e list of {path, version, args}. Several versions can be stored under one name (e.g. multiple Blender versions), highest version first. The same data also rides along on every /report via the settings snapshot; this endpoint is a direct query.",
         "operationId": "listExecutablesHandler",
@@ -2154,7 +2154,7 @@
         ]
       }
     },
-    "/v1.10/executable/set": {
+    "/v1.11/executable/set": {
       "post": {
         "description": "Registers or replaces a named executable (e.g. 'blender') with its path, version and optional default args. Multiple versions can coexist under one name — an entry with the same (name, version) is replaced, otherwise appended. Bumps the settings revision and broadcasts to every connected plugin on their next /report poll. Lets one plugin (e.g. the Blender add-on) publish a Blender path that other plugins (e.g. Maya) can reuse — including as the fallback for /tools/run and /run_blender_script.",
         "operationId": "setExecutableHandler",
@@ -2187,7 +2187,7 @@
         ]
       }
     },
-    "/v1.10/godot/report": {
+    "/v1.11/godot/report": {
       "post": {
         "description": "Polling endpoint for the Godot add-on. Subscribes the app on first call and returns a SoftwareResponse with the Client version, a connection message and pending tasks.",
         "operationId": "godotReportHandler",
@@ -2220,7 +2220,7 @@
         ]
       }
     },
-    "/v1.10/godot/unsubscribe_addon": {
+    "/v1.11/godot/unsubscribe_addon": {
       "post": {
         "deprecated": true,
         "description": "Deprecated alias of /addons/unsubscribe. Kept for backward compatibility with existing Godot add-ons.",
@@ -2254,7 +2254,7 @@
         ]
       }
     },
-    "/v1.10/notifications/mark_notification_read": {
+    "/v1.11/notifications/mark_notification_read": {
       "post": {
         "description": "Marks a server notification as read.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "MarkNotificationReadHandler",
@@ -2288,7 +2288,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/oauth2/logout": {
+    "/v1.11/oauth2/logout": {
       "post": {
         "description": "Revokes the API key and refresh token on the server and logs the user out of all connected apps.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "OAuth2LogoutHandler",
@@ -2322,7 +2322,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/oauth2/verification_data": {
+    "/v1.11/oauth2/verification_data": {
       "post": {
         "description": "Stores the add-on's PKCE code_verifier and state so the later /consumer/exchange/ redirect can be verified.",
         "operationId": "OAuth2VerificationDataHandler",
@@ -2355,7 +2355,7 @@
         ]
       }
     },
-    "/v1.10/profiles/download_gravatar_image": {
+    "/v1.11/profiles/download_gravatar_image": {
       "post": {
         "description": "Downloads a user's gravatar/avatar image into the Client temp directory.",
         "operationId": "DownloadGravatarImageHandler",
@@ -2388,7 +2388,7 @@
         ]
       }
     },
-    "/v1.10/profiles/get_user_profile": {
+    "/v1.11/profiles/get_user_profile": {
       "post": {
         "description": "Fetches the logged-in user's Blendkit profile.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetUserProfileHandler",
@@ -2422,7 +2422,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/ratings/get_bookmarks": {
+    "/v1.11/ratings/get_bookmarks": {
       "post": {
         "description": "Fetches the user's bookmarked assets.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetBookmarksHandler",
@@ -2456,7 +2456,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/ratings/get_rating": {
+    "/v1.11/ratings/get_rating": {
       "post": {
         "description": "Fetches the user's ratings for an asset.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "GetRatingHandler",
@@ -2490,7 +2490,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/ratings/send_rating": {
+    "/v1.11/ratings/send_rating": {
       "post": {
         "description": "Submits a rating for an asset. Only POST is accepted.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "SendRatingHandler",
@@ -2524,7 +2524,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/refresh_token": {
+    "/v1.11/refresh_token": {
       "post": {
         "description": "Refreshes the access token using a refresh token. On success a 'login' task is delivered to every connected app; on failure the apps are logged out.",
         "operationId": "RefreshTokenHandler",
@@ -2557,7 +2557,7 @@
         ]
       }
     },
-    "/v1.10/report": {
+    "/v1.11/report": {
       "post": {
         "description": "Primary polling endpoint for Blender add-ons. Subscribes the add-on on first call, refreshes the inactivity timer and returns the list of pending/finished/error tasks for the calling app. Rejects add-ons that do not send addon_version.",
         "operationId": "reportHandler",
@@ -2590,7 +2590,7 @@
         ]
       }
     },
-    "/v1.10/run_blender_script": {
+    "/v1.11/run_blender_script": {
       "post": {
         "description": "Runs a Python recipe under headless Blender. Used by external embedders (e.g. the Rhino plug-in) and available for the add-on's own background-script needs.",
         "operationId": "runBlenderScriptHandler",
@@ -2623,7 +2623,7 @@
         ]
       }
     },
-    "/v1.10/settings/get": {
+    "/v1.11/settings/get": {
       "get": {
         "description": "Returns the current settings snapshot (shared settings, global and per-plugin variables) for the running Client version, together with a monotonically increasing revision. Plugins must sync to this: the same snapshot is also broadcast on every /report response, so plugins apply whenever the revision grows.",
         "operationId": "getSettingsHandler",
@@ -2663,7 +2663,7 @@
         ]
       }
     },
-    "/v1.10/settings/set": {
+    "/v1.11/settings/set": {
       "post": {
         "description": "Applies a change to the shared settings (only the fields present in the body are modified), bumps the revision and returns the new snapshot. The change is broadcast to every connected plugin on their next /report poll.",
         "operationId": "setSettingsHandler",
@@ -2696,7 +2696,7 @@
         ]
       }
     },
-    "/v1.10/settings/set_variable": {
+    "/v1.11/settings/set_variable": {
       "post": {
         "description": "Stores a free-form variable/value pair on behalf of a plugin. An empty 'plugin' stores it globally (without plugin association); a non-empty 'plugin' namespaces it under that plugin name (e.g. blender -\u003e executable). Bumps the revision and returns the new snapshot; the change is broadcast on the next /report poll.",
         "operationId": "setVariableHandler",
@@ -2729,7 +2729,7 @@
         ]
       }
     },
-    "/v1.10/shutdown": {
+    "/v1.11/shutdown": {
       "get": {
         "description": "Schedules a graceful exit of the Client process shortly after responding 200 OK.",
         "operationId": "shutdownHandler",
@@ -2769,7 +2769,7 @@
         ]
       }
     },
-    "/v1.10/tools/list": {
+    "/v1.11/tools/list": {
       "get": {
         "description": "Returns the recipes embedded in this Client binary, each with its optional parameter schema. Because the tools ship inside the binary, this list always matches exactly what /tools/run can execute. Plugins use it to discover available tools without hard-coding script IDs.",
         "operationId": "listToolsHandler",
@@ -2790,7 +2790,7 @@
         ]
       }
     },
-    "/v1.10/tools/run": {
+    "/v1.11/tools/run": {
       "post": {
         "description": "Canonical alias for /run_blender_script: runs a bundled recipe (script_id from /tools/list) under headless Blender, forwarding params as params.json. New callers should prefer this endpoint.",
         "operationId": "runBlenderScriptHandler",
@@ -2823,7 +2823,7 @@
         ]
       }
     },
-    "/v1.10/wrappers/blocking_file_download": {
+    "/v1.11/wrappers/blocking_file_download": {
       "post": {
         "description": "Blocking helper that downloads a file and returns once finished.",
         "operationId": "BlockingFileDownloadHandler",
@@ -2856,7 +2856,7 @@
         ]
       }
     },
-    "/v1.10/wrappers/blocking_request": {
+    "/v1.11/wrappers/blocking_request": {
       "post": {
         "description": "Blocking helper that performs an arbitrary HTTP request to the Blendkit server through the Client's configured HTTP client and returns the response.",
         "operationId": "BlockingRequestHandler",
@@ -2889,7 +2889,7 @@
         ]
       }
     },
-    "/v1.10/wrappers/complete_upload_file_blocking": {
+    "/v1.11/wrappers/complete_upload_file_blocking": {
       "post": {
         "description": "Blocking helper that completes a multi-part file upload.\n\nRequires a logged-in Blendkit API key.",
         "operationId": "CompleteUploadFileBlocking",
@@ -2923,7 +2923,7 @@
         "x-requires-api-key": true
       }
     },
-    "/v1.10/wrappers/get_download_url": {
+    "/v1.11/wrappers/get_download_url": {
       "post": {
         "description": "Blocking helper that resolves the direct download URL and filename for an asset file.",
         "operationId": "GetDownloadURLWrapper",
@@ -2956,7 +2956,7 @@
         ]
       }
     },
-    "/v1.10/wrappers/nonblocking_request": {
+    "/v1.11/wrappers/nonblocking_request": {
       "post": {
         "description": "Schedules an arbitrary HTTP request to the Blendkit server; the response is reported back through /report tasks.",
         "operationId": "NonblockingRequestHandler",
