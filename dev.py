@@ -464,18 +464,55 @@ def live(args: argparse.Namespace) -> None:
     sys.exit(proc.returncode or 0)
 
 
-def verify(args: argparse.Namespace) -> None:
+def release(args: argparse.Namespace) -> None:
+    """Create a release by using prebuilt binaries.
+
+    Checking their code-signining and pack them into a final .zip.
+
+    Args:
+        args: Parsed CLI arguments.
+    """
+    version = read_client_version()
+    in_dir = os.path.abspath(args.prebuilt_bin_dir)
+    out_dir = os.path.abspath(os.path.join(args.out, f"v{version}"))
+    os.makedirs(out_dir, exist_ok=True)
+
+    files = os.listdir(in_dir)
+    for file in files:
+        file_path = os.path.join(in_dir, file)
+        if os.path.isdir(file_path):
+            print("Skipping copying directory", file_path)
+            continue
+        if "bk_client" not in file:
+            print("Skipping copying file", file_path)
+            continue
+
+        shutil.copy2(file_path, out_dir)
+
+    print("Prebuilt binaries copied.")
+
+    # VALIDATE BINARIES
+    verify(out_dir)
+
+    # PACKAGE BINARIES
+    print(f"Blendkit-Client v{version} builds ready in {out_dir}.")
+    zip_path = package(out_dir, version)
+
+    for _, _, output in BUILD_TARGETS:
+        bin_path = os.path.join(out_dir, output)
+        if os.path.isfile(bin_path):
+            os.remove(bin_path)
+
+    print(f"Release artifact: {zip_path}")
+
+
+def verify(binaries_path: str) -> None:
     """Verify code-signing/notarization of built Client binaries.
 
     - On Windows binaries, osslsigncode must be on PATH
       (https://github.com/mtrojnar/osslsigncode).
     - On macOS binaries, codesign and spctl are used.
-
-    Args:
-        args: Parsed CLI arguments. Uses ``args.path`` as the directory holding
-            the ``bk_client-*`` binaries to verify.
     """
-    binaries_path = args.path
     print("===== VERIFYING CLIENT BINARIES =====")
     signatures_ok = True
     client_files = [f for f in os.listdir(binaries_path) if f.startswith("bk_client")]
@@ -682,6 +719,11 @@ def main():
     p_verify = sub.add_parser("verify", help="Verify signing/notarization of built binaries.")
     p_verify.add_argument("path", help="Directory containing the bk_client-* binaries.")
     p_verify.set_defaults(func=verify)
+
+    p_release = sub.add_parser("release", help="Make release from prebuilt binaries.")
+    p_release.add_argument("--prebuilt-bin-dir", help="Directory containing prebuilt binaries.")
+    p_release.add_argument("--out", default="out", help="Output directory (default: ./out).")
+    p_release.set_defaults(func=release)
 
     sub.add_parser("test", help="Run Go unit tests and lint Python recipes.").set_defaults(func=test)
     sub.add_parser("lint", help="Lint Python recipes (ruff + pydoclint).").set_defaults(func=lint)
