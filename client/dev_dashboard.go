@@ -21,6 +21,7 @@ package main
 import (
 	_ "embed"
 	"net/http"
+	"os"
 )
 
 // devDashboardHTML is the self-contained developer dashboard page, embedded into
@@ -28,6 +29,14 @@ import (
 //
 //go:embed dev_dashboard.html
 var devDashboardHTML []byte
+
+// devDashboardEnabled reports whether the developer dashboard should be served.
+// It is gated behind the BLENDKIT_DEBUG=1 environment variable — the same
+// switch the Blender/Maya add-ons use — so the dashboard is only exposed on
+// developer machines and never on production/end-user Clients.
+func devDashboardEnabled() bool {
+	return os.Getenv("BLENDKIT_DEBUG") == "1"
+}
 
 // devDashboardHandler serves the developer dashboard: a same-origin HTML page
 // with buttons to call the Client's endpoints and view their raw responses.

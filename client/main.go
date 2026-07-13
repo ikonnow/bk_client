@@ -356,8 +356,14 @@ func main() {
 	mux.HandleFunc("/"+vapi+"/debug", DebugNetworkHandler)
 
 	// DEV DASHBOARD - same-origin HTML page for manual endpoint testing.
-	mux.HandleFunc("/dev", devDashboardHandler)
-	mux.HandleFunc("/"+vapi+"/dev", devDashboardHandler)
+	// Gated behind BLENDKIT_DEBUG=1 (the same switch the add-ons use) so the
+	// dashboard is not exposed on production/end-user Clients. The add-on
+	// spawns the Client with an inherited environment, so setting
+	// BLENDKIT_DEBUG=1 before launching the host app enables it here too.
+	if devDashboardEnabled() {
+		mux.HandleFunc("/dev", devDashboardHandler)
+		mux.HandleFunc("/"+vapi+"/dev", devDashboardHandler)
+	}
 
 	// SETTINGS - Client is the source of truth; plugins sync from here.
 	mux.HandleFunc("/settings/get", getSettingsHandler)
@@ -490,10 +496,12 @@ func main() {
 	mux.HandleFunc("/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 	mux.HandleFunc("/"+vapi+"/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 
-	// Standalone Clients on Windows get a system tray icon: the HTTP server runs
-	// in the background and the tray loop owns the main goroutine. Otherwise the
-	// server blocks here exactly as before.
-	if standalone && traySupported {
+	// Show a system tray icon whenever the platform supports one — both for
+	// standalone Clients and for add-on-spawned ones — so the running Client
+	// is always visible and quittable. The HTTP server runs in a background
+	// goroutine and the tray loop owns the main goroutine. On platforms
+	// without tray support the server blocks here exactly as before.
+	if traySupported {
 		go StartClient(mux)
 		runTray(*Server, fmt.Sprintf("localhost:%s", *Port))
 		return
