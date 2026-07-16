@@ -193,6 +193,7 @@ var proxyOptions = []string{
 var TimeoutCoefficient = []int{1, 10}
 
 var testURLs = []string{
+	// "https://status.blendkit.com/",
 	"https://www.blendkit.com/-/alive/",
 	"https://www.blendkit.com/api/v1/search-status/",
 	"https://www.blendkit.com/api/v1/search/?query=kitten",

@@ -356,8 +356,14 @@ func main() {
 	mux.HandleFunc("/"+vapi+"/debug", DebugNetworkHandler)
 
 	// DEV DASHBOARD - same-origin HTML page for manual endpoint testing.
-	mux.HandleFunc("/dev", devDashboardHandler)
-	mux.HandleFunc("/"+vapi+"/dev", devDashboardHandler)
+	// Gated behind BLENDKIT_DEBUG=1 (the same switch the add-ons use) so the
+	// dashboard is not exposed on production/end-user Clients. The add-on
+	// spawns the Client with an inherited environment, so setting
+	// BLENDKIT_DEBUG=1 before launching the host app enables it here too.
+	if devDashboardEnabled() {
+		mux.HandleFunc("/dev", devDashboardHandler)
+		mux.HandleFunc("/"+vapi+"/dev", devDashboardHandler)
+	}
 
 	// SETTINGS - Client is the source of truth; plugins sync from here.
 	mux.HandleFunc("/settings/get", getSettingsHandler)
@@ -366,6 +372,16 @@ func main() {
 	mux.HandleFunc("/"+vapi+"/settings/set", setSettingsHandler)
 	mux.HandleFunc("/settings/set_variable", setVariableHandler)
 	mux.HandleFunc("/"+vapi+"/settings/set_variable", setVariableHandler)
+
+	// EXECUTABLES - Client-stored external programs (e.g. Blender) that any
+	// plugin can register once and every other plugin can reuse. Ride along on
+	// the settings Snapshot too, so they also sync on every /report.
+	mux.HandleFunc("/executable/list", listExecutablesHandler)
+	mux.HandleFunc("/"+vapi+"/executable/list", listExecutablesHandler)
+	mux.HandleFunc("/executable/get", getExecutableHandler)
+	mux.HandleFunc("/"+vapi+"/executable/get", getExecutableHandler)
+	mux.HandleFunc("/executable/set", setExecutableHandler)
+	mux.HandleFunc("/"+vapi+"/executable/set", setExecutableHandler)
 
 	// LOGIN
 	mux.HandleFunc("/consumer/exchange/", consumerExchangeHandler) // does not use /vX.Y/ to keep stuff simple on server side
@@ -400,6 +416,14 @@ func main() {
 	// available for the add-on's own future bg-script migrations.
 	mux.HandleFunc("/run_blender_script", runBlenderScriptHandler)
 	mux.HandleFunc("/"+vapi+"/run_blender_script", runBlenderScriptHandler)
+
+	// HOST-AGNOSTIC: bundled-tool discovery + execution. /tools/list
+	// enumerates the recipes embedded in this binary; /tools/run is the
+	// canonical alias for /run_blender_script (same handler/body).
+	mux.HandleFunc("/tools/list", listToolsHandler)
+	mux.HandleFunc("/"+vapi+"/tools/list", listToolsHandler)
+	mux.HandleFunc("/tools/run", runBlenderScriptHandler)
+	mux.HandleFunc("/"+vapi+"/tools/run", runBlenderScriptHandler)
 
 	// API HANDLERS
 	mux.HandleFunc("/profiles/download_gravatar_image", DownloadGravatarImageHandler)
@@ -472,10 +496,12 @@ func main() {
 	mux.HandleFunc("/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 	mux.HandleFunc("/"+vapi+"/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 
-	// Standalone Clients on Windows get a system tray icon: the HTTP server runs
-	// in the background and the tray loop owns the main goroutine. Otherwise the
-	// server blocks here exactly as before.
-	if standalone && traySupported {
+	// Show a system tray icon whenever the platform supports one — both for
+	// standalone Clients and for add-on-spawned ones — so the running Client
+	// is always visible and quittable. The HTTP server runs in a background
+	// goroutine and the tray loop owns the main goroutine. On platforms
+	// without tray support the server blocks here exactly as before.
+	if traySupported {
 		go StartClient(mux)
 		runTray(*Server, fmt.Sprintf("localhost:%s", *Port))
 		return

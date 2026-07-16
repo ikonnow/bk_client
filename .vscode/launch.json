@@ -3,6 +3,7 @@
     // "Run/Debug/Test Client" require the Go extension (golang.go) and Delve.
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Run Project Setup",
             "type": "node",

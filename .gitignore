@@ -5,6 +5,8 @@ client/v*.*.*
 client/client.exe
 client/blenderkit-client-dev
 client/blenderkit-client-dev.exe
+client/bk_client-dev
+client/bk_client-dev.exe
 __debug_bin.exe
 
 bk_client-settings.json
@@ -14,6 +16,9 @@ client_builds
 .mypy_cache
 .venv
 .pdm-python
+pdm.lock
+
+*.egg-info
 
 .ruff_cache
 

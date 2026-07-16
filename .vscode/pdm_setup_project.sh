@@ -140,7 +140,7 @@ if command -v git >/dev/null 2>&1 && [ -f "${REPO_DIR}/.gitmodules" ]; then
   fi
 fi
 
-PROJECT_NAME="bk_maya"
+PROJECT_NAME="bk_client"
 PROJECT_DIR="${REPO_DIR}"
 REQUIREMENTS_FILE="${PROJECT_DIR}/pyproject.toml"
 

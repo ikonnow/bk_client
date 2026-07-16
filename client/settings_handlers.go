@@ -124,3 +124,106 @@ func setVariableHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	writeSnapshot(w, snap)
 }
+
+// SetExecutableData is the body of a /executable/set request. It registers (or
+// replaces) a named external program (e.g. "blender") the Client keeps on behalf
+// of plugins so any other plugin can reuse it.
+type SetExecutableData struct {
+	Name    string   `json:"name"`
+	Path    string   `json:"path"`
+	Version string   `json:"version,omitempty"`
+	Args    []string `json:"args,omitempty"`
+}
+
+// listExecutablesHandler returns all stored executables (name -> descriptor) so
+// a plugin can discover what the Client already knows about (e.g. Maya asking
+// whether a Blender path is available). Also available on every /report via the
+// settings Snapshot; this endpoint is a convenient direct query.
+func listExecutablesHandler(w http.ResponseWriter, r *http.Request) {
+	if SettingsStore == nil {
+		http.Error(w, "Settings store not initialized", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Blendkit-Client-Version", ClientVersion)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"executables": SettingsStore.Snapshot().Executables,
+	})
+}
+
+// getExecutableHandler returns the stored executables for a name. The name is
+// taken from the "name" query parameter; an optional "version" filters to an
+// exact match. The response is always {"name":..., "executables":[...]} — an
+// empty array means nothing is stored, so callers can branch on presence
+// (e.g. length) without treating absence as an error. Multiple entries are
+// returned highest-version-first when several versions share the name.
+func getExecutableHandler(w http.ResponseWriter, r *http.Request) {
+	if SettingsStore == nil {
+		http.Error(w, "Settings store not initialized", http.StatusServiceUnavailable)
+		return
+	}
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		http.Error(w, "Missing required query parameter: name", http.StatusBadRequest)
+		return
+	}
+	version := r.URL.Query().Get("version")
+
+	list := SettingsStore.GetExecutables(name)
+	if version != "" {
+		filtered := make([]settings.Executable, 0, 1)
+		for _, e := range list {
+			if e.Version == version {
+				filtered = append(filtered, e)
+			}
+		}
+		list = filtered
+	}
+	if list == nil {
+		list = []settings.Executable{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Blendkit-Client-Version", ClientVersion)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"name":        name,
+		"executables": list,
+	})
+}
+
+// setExecutableHandler stores (or replaces) a named executable, bumps the
+// revision and returns the new settings Snapshot. The change is broadcast to
+// every connected plugin on their next /report poll.
+func setExecutableHandler(w http.ResponseWriter, r *http.Request) {
+	if SettingsStore == nil {
+		http.Error(w, "Settings store not initialized", http.StatusServiceUnavailable)
+		return
+	}
+	var data SetExecutableData
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Error parsing JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	if data.Name == "" {
+		http.Error(w, "Missing required field: name", http.StatusBadRequest)
+		return
+	}
+	if data.Path == "" {
+		http.Error(w, "Missing required field: path", http.StatusBadRequest)
+		return
+	}
+
+	snap, err := SettingsStore.SetExecutable(data.Name, settings.Executable{
+		Path:    data.Path,
+		Version: data.Version,
+		Args:    data.Args,
+	})
+	if err != nil {
+		BKLog.Printf("%v Failed to persist settings: %v", EmoWarning, err)
+	}
+	writeSnapshot(w, snap)
+}

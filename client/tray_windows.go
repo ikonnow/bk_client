@@ -57,6 +57,11 @@ func runTray(serverURL, listenAddr string) {
 		systray.AddSeparator()
 		mOpenWeb := systray.AddMenuItem("Open Blendkit.com", "Open the Blendkit website in your browser")
 		mOpenDev := systray.AddMenuItem("Open Dev Dashboard", "Open the Client's developer dashboard in your browser")
+		// The dev dashboard is only served when BLENDKIT_DEBUG=1; hide the
+		// menu entry otherwise so it can't link to a 404.
+		if !devDashboardEnabled() {
+			mOpenDev.Hide()
+		}
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("Quit", "Stop the Blendkit-Client")
 

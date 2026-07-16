@@ -7,7 +7,6 @@ exclude_dirs:
   - "out"               # build/output tree containing legacy Blender add-on
   - "_debug"            # ad-hoc local probes, not shipped
   - "tests"             # asserts + synthetic fixtures
-  - "bk_client"         # git submodule (Go client) — scanned in its own repo
 
 skips:
   - "B101" # assert_used — used in tests (excluded above, but harmless globally)

@@ -56,7 +56,12 @@ import (
 // recipe is a matter of dropping its .py into tools/ and re-running
 // `go build`. No deploy-script changes needed.
 //
-//go:embed tools/*.py
+// Companion tools/<id>.json manifests are embedded too so GET /tools/list
+// can advertise each recipe's parameters to connected plugins. The .json
+// glob must match at least one file at build time (export_glb.json,
+// export_usd.json satisfy that).
+//
+//go:embed tools/*.py tools/*.json
 var bundledTools embed.FS
 
 // RunBlenderScriptData is the JSON body of POST /run_blender_script.
@@ -77,6 +82,10 @@ type RunBlenderScriptData struct {
 	AddonVersion    string `json:"addon_version"`
 	PlatformVersion string `json:"platform_version"`
 	Software        string `json:"software"`
+	// BlenderVersion optionally selects which stored "blender" executable to use
+	// as the fallback when BlenderExePath is empty. Empty means the highest
+	// stored version. Ignored when BlenderExePath is supplied.
+	BlenderVersion string `json:"blender_version,omitempty"`
 }
 
 func runBlenderScriptHandler(w http.ResponseWriter, r *http.Request) {
@@ -100,8 +109,19 @@ func runBlenderScriptHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "set either script_id or script_path, not both", http.StatusBadRequest)
 		return
 	}
+	// blender_exe_path is the caller-supplied override. When omitted, fall back
+	// to the Client-stored "blender" executable (registered via /executable/set
+	// by any plugin), so e.g. Maya can run a recipe without knowing where
+	// Blender lives as long as some plugin registered it earlier. When several
+	// Blender versions are stored, blender_version picks one; empty uses the
+	// highest.
+	if data.BlenderExePath == "" && SettingsStore != nil {
+		if exe, ok := SettingsStore.GetExecutable("blender", data.BlenderVersion); ok && exe.Path != "" {
+			data.BlenderExePath = exe.Path
+		}
+	}
 	if data.BlenderExePath == "" {
-		http.Error(w, "blender_exe_path is required", http.StatusBadRequest)
+		http.Error(w, "blender_exe_path is required (none supplied and no stored 'blender' executable; register one via /executable/set)", http.StatusBadRequest)
 		return
 	}
 
@@ -137,7 +157,7 @@ func runBlenderScriptHandler(w http.ResponseWriter, r *http.Request) {
 //     - `go run` dev fallback.
 //
 // The embedded extraction reuses one temp dir per client version
-// (os.TempDir()/blenderkit-client/v<ClientVersion>/tools/<id>.py).
+// (os.TempDir()/bk_client/v<ClientVersion>/tools/<id>.py).
 // Always-overwrite keeps it idempotent even when a previous run left
 // stale bytes there.
 func resolveBundledScript(id string) (string, error) {
@@ -166,7 +186,7 @@ func resolveBundledScript(id string) (string, error) {
 }
 
 // extractEmbeddedScript reads tools/<id>.py from the embed.FS and
-// writes it under os.TempDir()/blenderkit-client/v<ClientVersion>/tools/.
+// writes it under os.TempDir()/bk_client/v<ClientVersion>/tools/.
 // Returns the path of the materialised copy. Returns an error if the
 // script isn't bundled, or if the write fails (caller falls back to
 // the filesystem lookup in resolveBundledScript).
@@ -178,9 +198,9 @@ func extractEmbeddedScript(id string) (string, error) {
 	}
 	// Per-version subdir means an upgraded client won't reuse stale
 	// extracted bytes from a previous install — and uninstalling the
-	// client leaves a tidy "blenderkit-client/" directory the user can
+	// client leaves a tidy "bk_client/" directory the user can
 	// safely delete.
-	cacheDir := filepath.Join(os.TempDir(), "blenderkit-client", "v"+ClientVersion, "tools")
+	cacheDir := filepath.Join(os.TempDir(), "bk_client", "v"+ClientVersion, "tools")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return "", fmt.Errorf("creating embed cache dir: %w", err)
 	}
