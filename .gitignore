@@ -9,6 +9,7 @@ client/bk_client-dev
 client/bk_client-dev.exe
 __debug_bin.exe
 
+bk_client-settings.json
 *-client-settings.json
 
 client_builds

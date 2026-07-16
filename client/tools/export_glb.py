@@ -173,15 +173,15 @@ def downscale_images(cap):
             continue
         try:
             w, h = img.size
-        except Exception:
+        except Exception:  # noqa: S112
             continue
         if not w or not h:
             continue
         longest = max(w, h)
         if longest <= cap:
             continue
-        nw = max(1, int(round(w * cap / longest)))
-        nh = max(1, int(round(h * cap / longest)))
+        nw = max(1, int(round(w * cap / longest)))  # noqa: RUF046
+        nh = max(1, int(round(h * cap / longest)))  # noqa: RUF046
         try:
             img.scale(nw, nh)
             scaled.append(f"{w}x{h}->{nw}x{nh}")
@@ -199,10 +199,7 @@ print("export_glb: writing", out_glb)
 texture_max_px = int(params.get("texture_max_px", 0) or 0)
 scaled = downscale_images(texture_max_px)
 if scaled:
-    print(
-        f"export_glb: downscaled {len(scaled)} image(s) to <={texture_max_px}px: "
-        + ", ".join(scaled)
-    )
+    print(f"export_glb: downscaled {len(scaled)} image(s) to <={texture_max_px}px: " + ", ".join(scaled))
 elif texture_max_px > 0:
     print(f"export_glb: no images exceeded {texture_max_px}px cap")
 
