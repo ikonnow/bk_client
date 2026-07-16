@@ -19,7 +19,7 @@ target-version = "py311"
 line-length = 120
 include = [
     "pyproject.toml",
-    "client/tools/**",
+    "client/**",
     "dev.py",
 ]
 exclude = [
