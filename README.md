@@ -50,6 +50,20 @@ pyproject.toml          Python tooling config (ruff, pydoclint) for tools/
 Requirements: a recent **Go** toolchain (see [`client/go.mod`](client/go.mod)) and
 **Python 3.10+** with the dev tools (`ruff`, `pydoclint`) for linting the recipes.
 
+### Git hooks (pre-commit)
+
+This repo uses [pre-commit](https://pre-commit.com) to run `ruff`, `pydoclint`
+and `bandit` before each commit. The hook config lives in
+[`.pre-commit-config.yaml`](.pre-commit-config.yaml); the generated hook under
+`.git/hooks/` is local-only and not versioned, so each contributor installs it
+once:
+
+```sh
+pip install pre-commit          # or: uv tool install pre-commit
+pre-commit install              # generate .git/hooks/pre-commit from the config
+pre-commit run --all-files      # optional: run the hooks against the whole repo
+```
+
 All commands go through [`dev.py`](dev.py):
 
 ```sh

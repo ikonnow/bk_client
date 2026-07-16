@@ -8,8 +8,10 @@ dependencies = []
 # these are not part of any distribution - dev tooling only
 [dependency-groups]
 dev = [
-    "ruff>=0.15.6",
-    "pydoclint>=0.8.3",
+    "bandit==1.9.4", # code is currently invalid for bandit
+    "ruff==0.15.20", # code is currently invalid for ruff
+    "pydoclint==0.9.1", # code is currently invalid for pydoclint
+    "pre-commit>=4.6.0",
 ]
 
 

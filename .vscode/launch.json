@@ -4,6 +4,23 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Run Project Setup",
+            "type": "node",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "windows": {
+                "runtimeExecutable": "${workspaceFolder}/.vscode/pdm_setup_project.bat",
+            },
+            "linux": {
+                "runtimeExecutable": "${workspaceFolder}/.vscode/pdm_setup_project.sh",
+            },
+            "osx": {
+                "runtimeExecutable": "${workspaceFolder}/.vscode/pdm_setup_project.sh",
+            }
+        },
+
+        {
             // Build the Client from source and run it standalone (no DCC).
             // Add flags under "args", e.g. ["--port", "62000", "--server", "https://devel.blendkit.com"].
             "name": "Run Client (standalone)",
@@ -70,6 +87,178 @@
             "args": [
                 "build"
             ]
-        }
+        },
+
+        {
+            "name": "[GOFMT] Check client",
+            "type": "node",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "windows": {
+                "runtimeExecutable": "powershell",
+                "args": [
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-Command",
+                    "$fmt = gofmt -l ./client; if ($fmt) { Write-Host 'Go files need formatting:'; $fmt; Write-Host ''; Write-Host 'gofmt diff:'; gofmt -d ./client; exit 1 } else { Write-Host 'Go files are formatted.' }"
+                ]
+            },
+            "linux": {
+                "runtimeExecutable": "/bin/bash",
+                "args": [
+                    "-c",
+                    "fmt_out=\"$(gofmt -l ./client)\"; if [ -n \"$fmt_out\" ]; then echo 'Go files need formatting:'; echo \"$fmt_out\"; echo ''; echo 'gofmt diff:'; gofmt -d ./client; exit 1; else echo 'Go files are formatted.'; fi"
+                ]
+            },
+            "osx": {
+                "runtimeExecutable": "/bin/bash",
+                "args": [
+                    "-c",
+                    "fmt_out=\"$(gofmt -l ./client)\"; if [ -n \"$fmt_out\" ]; then echo 'Go files need formatting:'; echo \"$fmt_out\"; echo ''; echo 'gofmt diff:'; gofmt -d ./client; exit 1; else echo 'Go files are formatted.'; fi"
+                ]
+            }
+        },
+
+        {
+            "name": "[GOFMT] Fix client",
+            "type": "node",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "windows": {
+                "runtimeExecutable": "powershell",
+                "args": [
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-Command",
+                    "$fmt = gofmt -w ./client; if ($fmt) { Write-Host 'Go files need formatting:'; $fmt; Write-Host ''; Write-Host 'gofmt diff:'; gofmt -d ./client; exit 1 } else { Write-Host 'Go files are formatted.' }"
+                ]
+            },
+            "linux": {
+                "runtimeExecutable": "/bin/bash",
+                "args": [
+                    "-c",
+                    "fmt_out=\"$(gofmt -w ./client)\"; if [ -n \"$fmt_out\" ]; then echo 'Go files need formatting:'; echo \"$fmt_out\"; echo ''; echo 'gofmt diff:'; gofmt -d ./client; exit 1; else echo 'Go files are formatted.'; fi"
+                ]
+            },
+            "osx": {
+                "runtimeExecutable": "/bin/bash",
+                "args": [
+                    "-c",
+                    "fmt_out=\"$(gofmt -w ./client)\"; if [ -n \"$fmt_out\" ]; then echo 'Go files need formatting:'; echo \"$fmt_out\"; echo ''; echo 'gofmt diff:'; gofmt -d ./client; exit 1; else echo 'Go files are formatted.'; fi"
+                ]
+            }
+        },
+
+        {
+            "name": "[RUFF] Check All",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "ruff",
+            "args": [
+                "check",
+                "."
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "windows": {
+                "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            },
+            "linux": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            },
+            "osx": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            }
+        },
+
+        {
+            "name": "[RUFF] Check All Diff",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "ruff",
+            "args": [
+                "format",
+                "--check",
+                "--diff",
+                "."
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "windows": {
+                "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            },
+            "linux": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            },
+            "osx": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            }
+        },
+
+        {
+            "name": "[RUFF] Fix All",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "ruff",
+            "args": [
+                "format",
+                "."
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "windows": {
+                "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            },
+            "linux": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            },
+            "osx": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            }
+        },
+
+        {
+            "name": "[BANDIT] Check All",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "bandit",
+            "args": [
+                "-c", "_bandit.yaml",
+                "-ll",
+                "-r", ".",
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "windows": {
+                "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            },
+            "linux": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            },
+            "osx": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            }
+        },
+
+        {
+            "name": "[PYDOCS] Check All",
+            "type": "node",
+            "request": "launch",
+            "args": ["."],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+
+            "windows": {
+                "runtimeExecutable": "${workspaceFolder}/.venv/Scripts/pydoclint.exe",
+            },
+            "linux": {
+                "runtimeExecutable": "${workspaceFolder}/.venv/bin/pydoclint",
+            },
+            "osx": {
+                "runtimeExecutable": "${workspaceFolder}/.venv/bin/pydoclint",
+            }
+        },
     ]
 }
