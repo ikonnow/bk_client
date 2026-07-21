@@ -804,14 +804,14 @@ func TestGetAssetInstance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			originalClient := http.DefaultClient
+			originalClient := ClientAPI
 			mockClient := &http.Client{
 				Transport: &mockTransport{
 					response: tt.mockResp,
 				},
 			}
-			http.DefaultClient = mockClient
-			defer func() { http.DefaultClient = originalClient }()
+			ClientAPI = mockClient
+			defer func() { ClientAPI = originalClient }()
 
 			got, err := GetAssetInstance(tt.assetBaseID)
 			if (err != nil) != tt.wantErr {
