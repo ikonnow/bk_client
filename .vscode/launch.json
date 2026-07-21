@@ -74,7 +74,7 @@
             "type": "go",
             "request": "launch",
             "mode": "test",
-            "program": "${workspaceFolder}/client/...",
+            "program": "${workspaceFolder}/client",
             "cwd": "${workspaceFolder}/client"
         },
         {
