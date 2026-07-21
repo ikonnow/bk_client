@@ -2884,7 +2884,7 @@ func uploadFileToS3(file UploadFile, uploadInfo S3UploadInfoResponse, appID int,
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.ContentLength = fileSize
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := ClientUploads.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to upload to S3: %w", err)
 	}
@@ -3621,7 +3621,7 @@ func bkclientjsGetAsset(appID int, apiKey, assetBaseID, assetID, resolution stri
 // https://devel.blendkit.com/api/v1/docs/#tag/search
 func GetAssetInstance(assetBaseID string) (Asset, error) {
 	url := fmt.Sprintf("%s/api/v1/search/?query=asset_base_id:%s", *Server, assetBaseID)
-	resp, err := http.Get(url)
+	resp, err := ClientAPI.Get(url)
 	if err != nil {
 		return Asset{}, err
 	}
