@@ -2,28 +2,8 @@ package apispec
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 )
-
-// VersionPrefix derives the versioned route prefix (e.g. "v1.9") from a full
-// semantic version string (e.g. "1.9.0").
-//
-// Args:
-//
-//	version: Full semantic version, e.g. "1.9.0".
-//
-// Returns:
-//
-//	The "vMAJOR.MINOR" prefix, e.g. "v1.9". Falls back to "v" + version when
-//	the version cannot be parsed.
-func VersionPrefix(version string) string {
-	parts := strings.Split(version, ".")
-	if len(parts) < 2 {
-		return "v" + version
-	}
-	return fmt.Sprintf("v%s.%s", parts[0], parts[1])
-}
 
 // OpenAPI builds an OpenAPI 3.1 document for the Client API and returns it as
 // indented JSON.
@@ -37,14 +17,9 @@ func VersionPrefix(version string) string {
 //	The OpenAPI document encoded as indented JSON bytes, or an error if it
 //	could not be marshalled.
 func OpenAPI(version string) ([]byte, error) {
-	prefix := VersionPrefix(version)
-
 	paths := map[string]any{}
 	for _, r := range Routes() {
-		addPath(paths, r.Path, r, prefix)
-		if r.Versioned {
-			addPath(paths, "/"+prefix+r.Path, r, prefix)
-		}
+		addPath(paths, r.Path, r)
 	}
 
 	doc := map[string]any{
@@ -56,7 +31,8 @@ func OpenAPI(version string) ([]byte, error) {
 				"The Client runs on localhost and bridges Blendkit DCC add-ons (Blender, Godot, " +
 				"and embedders such as Maya and Rhino) with the Blendkit web service.\n\n" +
 				"Most endpoints are registered twice: once under the bare path (e.g. `/report`) and " +
-				"once under the versioned prefix (e.g. `/" + prefix + "/report`). Both are equivalent.\n\n" +
+				"once under a versioned prefix matching the running Client's major.minor version " +
+				"(e.g. `/vX.Y/report`). Both are equivalent; only the bare paths are listed here.\n\n" +
 				"This document is generated from the Go route registry in " +
 				"`internal/apispec` by `cmd/apidocgen`. Do not edit it by hand.",
 			"license": map[string]any{
@@ -87,7 +63,7 @@ func openAPITags() []any {
 	return tags
 }
 
-func addPath(paths map[string]any, path string, r Route, prefix string) {
+func addPath(paths map[string]any, path string, r Route) {
 	item, ok := paths[path].(map[string]any)
 	if !ok {
 		item = map[string]any{}
