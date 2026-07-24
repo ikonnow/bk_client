@@ -15,17 +15,17 @@ import (
 //
 //	The generated Markdown document as a string.
 func Markdown(version string) string {
-	prefix := VersionPrefix(version)
 	var b strings.Builder
 
 	b.WriteString("# Blendkit-Client API\n\n")
 	b.WriteString("> Generated from `internal/apispec` by `cmd/apidocgen`. Do not edit by hand.\n\n")
-	fmt.Fprintf(&b, "**Client version:** `%s` &nbsp;&nbsp; **Versioned prefix:** `/%s`\n\n", version, prefix)
+	fmt.Fprintf(&b, "**Client version:** `%s`\n\n", version)
 	b.WriteString("The Client is a local HTTP server (default port **62485**) that bridges Blendkit ")
 	b.WriteString("DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the ")
 	b.WriteString("Blendkit web service.\n\n")
 	b.WriteString("Most endpoints are registered twice: once under the bare path (e.g. `/report`) and ")
-	fmt.Fprintf(&b, "once under the versioned prefix (e.g. `/%s/report`). Both are equivalent.\n\n", prefix)
+	b.WriteString("once under a versioned prefix matching the running Client's major.minor version ")
+	b.WriteString("(e.g. `/vX.Y/report`). Both are equivalent; only the bare paths are documented below.\n\n")
 	b.WriteString("A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this file. ")
 	b.WriteString("Import it into Postman/Insomnia, render it with Swagger UI/Redoc, or generate client SDKs from it.\n\n")
 
@@ -75,7 +75,7 @@ func Markdown(version string) string {
 			b.WriteString(r.Description + "\n\n")
 			fmt.Fprintf(&b, "- **Handler:** `%s`\n", r.Handler)
 			if r.Versioned {
-				fmt.Fprintf(&b, "- **Versioned alias:** `/%s%s`\n", prefix, r.Path)
+				fmt.Fprintf(&b, "- **Versioned alias:** `/vX.Y%s`\n", r.Path)
 			}
 			if r.RequestType != "" {
 				fmt.Fprintf(&b, "- **Request body:** JSON `%s` (Go struct in package main)\n", r.RequestType)
