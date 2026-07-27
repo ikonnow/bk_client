@@ -1,30 +1,28 @@
-name: Release
+name: Release (draft / testing only)
 
-# Builds the cross-platform Client bundle (bk_client.zip) via dev.py.
+# Builds the cross-platform Client bundle (bk_client.zip) via dev.py for quick,
+# UNSIGNED test builds. This workflow does NOT publish real releases.
 #
-# HOW TO TEST THE CI WITHOUT A TAG:
-#   Actions tab -> "Release" -> "Run workflow". This runs on any branch and
-#   uploads bk_client.zip as a downloadable run artifact — no tag needed.
-#   Set the "make_release" input to "draft" to also publish a DRAFT GitHub
-#   Release (auto-named, safe to delete) so the release-publishing step can be
-#   exercised too.
+# HOW TO USE:
+#   Actions tab -> "Release (draft / testing only)" -> "Run workflow". This runs
+#   on any branch and uploads bk_client.zip as a downloadable run artifact — no
+#   tag needed. Set the "make_release" input to "draft" to also publish a DRAFT
+#   GitHub Release (auto-named, safe to delete) so the release-publishing step
+#   can be exercised too.
 #
-# REAL RELEASES: pushing a tag like v1.10.0 builds the bundle and publishes a
-# non-draft GitHub Release with bk_client.zip attached.
+# REAL RELEASES: use the "build" workflow with make_release=publish. That
+# pipeline code-signs the binaries and publishes a non-draft GitHub Release.
 
 on:
   workflow_dispatch:
     inputs:
       make_release:
-        description: "Also publish a GitHub Release?"
+        description: "Also publish a DRAFT GitHub Release?"
         type: choice
         options:
           - "no"
           - "draft"
         default: "no"
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: write
@@ -61,13 +59,6 @@ jobs:
           name: bk_client
           path: ${{ steps.bundle.outputs.path }}
           if-no-files-found: error
-
-      # Real release: triggered by pushing a v* tag.
-      - name: Publish release (tag)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ steps.bundle.outputs.path }}
 
       # Optional draft release when manually testing via workflow_dispatch.
       - name: Publish draft release (manual test)
