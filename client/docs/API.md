@@ -18,6 +18,7 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 |---|---|:---:|:---:|---|---|
 | GET | `/` |  |  | Client status page | — |
 | POST | `/report` | ✓ |  | Poll for tasks (Blender) | `GetReportData` |
+| POST | `/report_event` | ✓ |  | Report a telemetry event | `ReportEventData` |
 | GET, POST | `/shutdown` | ✓ |  | Shut down the Client | — |
 | GET | `/debug` | ✓ |  | Network/debug diagnostics | — |
 | GET | `/dev` | ✓ |  | Developer test dashboard | — |
@@ -149,6 +150,14 @@ Primary polling endpoint for Blender add-ons. Subscribes the add-on on first cal
 - **Handler:** `reportHandler`
 - **Versioned alias:** `/vX.Y/report`
 - **Request body:** JSON `GetReportData` (Go struct in package main)
+
+#### `POST /report_event`
+
+Fire-and-forget telemetry (e.g. login funnel events). The Client forwards the event to the server with standard headers in the background; failures are only logged, never surfaced to the UI.
+
+- **Handler:** `ReportEventHandler`
+- **Versioned alias:** `/vX.Y/report_event`
+- **Request body:** JSON `ReportEventData` (Go struct in package main)
 
 #### `GET / POST /shutdown`
 

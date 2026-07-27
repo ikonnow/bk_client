@@ -81,6 +81,12 @@ func Routes() []Route {
 			Handler:     "reportHandler", RequestType: "GetReportData",
 		},
 		{
+			Path: "/report_event", Methods: []string{"POST"}, Versioned: true, Tag: "core",
+			Summary:     "Report a telemetry event",
+			Description: "Fire-and-forget telemetry (e.g. login funnel events). The Client forwards the event to the server with standard headers in the background; failures are only logged, never surfaced to the UI.",
+			Handler:     "ReportEventHandler", RequestType: "ReportEventData",
+		},
+		{
 			Path: "/shutdown", Methods: []string{"GET", "POST"}, Versioned: true, Tag: "core",
 			Summary:     "Shut down the Client",
 			Description: "Schedules a graceful exit of the Client process shortly after responding 200 OK.",
