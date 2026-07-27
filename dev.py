@@ -142,6 +142,18 @@ BUILD_TARGETS = [
     ("linux", "arm64", "bk_client-linux-arm64"),
 ]
 
+# Targets that require a special toolchain and are NOT produced by the normal
+# `dev.py build` cross-compile (which uses the modern go.mod). They are built
+# separately in CI (see build.yml) and merged in at release time. Packaging
+# includes them only when the corresponding binary is present.
+LEGACY_TARGETS = [
+    # Windows 7/8/8.1: Go >= 1.21 dropped support, so this is built with go1.20.
+    ("windows", "amd64", "bk_client-windows7-x86_64.exe"),
+]
+
+# Every binary that may appear in a release bundle (modern + legacy).
+ALL_TARGETS = BUILD_TARGETS + LEGACY_TARGETS
+
 
 def _kill_existing_dev_clients(binary: str) -> None:
     """Terminate dev Client processes left over from a previous ``run``.
@@ -291,10 +303,13 @@ def package(out_dir: str, version: str) -> str:
     zip_path = os.path.join(out_dir, "bk_client.zip")
 
     binaries = []
-    for goos, goarch, output in BUILD_TARGETS:
+    for goos, goarch, output in ALL_TARGETS:
         bin_path = os.path.join(out_dir, output)
         if not os.path.isfile(bin_path):
-            print(f"package: WARNING missing binary {output}, skipping in manifest")
+            # Legacy targets are optional (only present in full CI releases);
+            # only the standard cross-compiled targets are expected every time.
+            if (goos, goarch, output) in BUILD_TARGETS:
+                print(f"package: WARNING missing binary {output}, skipping in manifest")
             continue
         binaries.append(
             {
@@ -498,7 +513,7 @@ def release(args: argparse.Namespace) -> None:
     print(f"Blendkit-Client v{version} builds ready in {out_dir}.")
     zip_path = package(out_dir, version)
 
-    for _, _, output in BUILD_TARGETS:
+    for _, _, output in ALL_TARGETS:
         bin_path = os.path.join(out_dir, output)
         if os.path.isfile(bin_path):
             os.remove(bin_path)
