@@ -171,6 +171,44 @@ jobs:
           path: client/out/bk_client-windows-x86_64.exe
           archive: false
 
+  # Windows 7/8/8.1 (pre-Windows-10) build. Go >= 1.21 dropped support for these
+  # OSes, so we cross-compile with the last compatible toolchain (go1.20) and a
+  # pinned set of older dependencies. Produces a separate, distinctly named
+  # binary shipped alongside the modern one; the add-on picks it automatically on
+  # pre-Windows-10 machines.
+  build_windows7_x86_64:
+    runs-on: ubuntu-24.04
+    needs: get_version
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Go 1.20 (last version supporting Windows 7/8)
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.20.14'
+        id: go
+      - name: Pin module + dependencies for Go 1.20
+        # color@v1.6.x needs sys@v0.38.0 (go1.24+); go-get-proxied@v1.4.0 needs
+        # go1.25+. Downgrade to the last versions that build on go1.20.
+        working-directory: ./client
+        run: |
+          go mod edit -go=1.20
+          go get github.com/rapid7/go-get-proxied@1.3.2
+          go get github.com/gookit/color@v1.5.4
+          go get golang.org/x/sys@v0.30.0
+          go mod tidy
+      - name: Build Blendkit_Client (Windows 7 x86_64)
+        working-directory: ./client
+        env:
+          CGO_ENABLED: '0'
+          GOOS: windows
+          GOARCH: amd64
+        run: go build -o out/bk_client-windows7-x86_64.exe -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bk_client-windows7-x86_64.exe
+          path: client/out/bk_client-windows7-x86_64.exe
+          archive: false
+
 # MARK: CODE SIGN
   code_sign_macos:
     runs-on: ubuntu-latest
@@ -283,7 +321,7 @@ jobs:
   code_sign_windows:
     runs-on: ubuntu-latest
     environment: signing
-    needs: [build_windows_arm, build_windows_x86_64]
+    needs: [build_windows_arm, build_windows_x86_64, build_windows7_x86_64]
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -296,7 +334,7 @@ jobs:
           CERTUM_EMAIL: ${{ secrets.CERTUM_EMAIL }}
           CERTUM_OTP:   ${{ secrets.CERTUM_OTP }}
         with:
-          input_path: out/bk_client-windows-*.exe
+          input_path: out/bk_client-windows*.exe
 
       - name: Upload signed x86_64 artifact
         uses: actions/upload-artifact@v7
@@ -311,6 +349,14 @@ jobs:
         with:
           name: bk_client-windows-arm64.exe
           path: out/bk_client-windows-arm64.exe
+          archive: false
+          overwrite: true
+
+      - name: Upload signed Windows 7 x86_64 artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: bk_client-windows7-x86_64.exe
+          path: out/bk_client-windows7-x86_64.exe
           archive: false
           overwrite: true
 

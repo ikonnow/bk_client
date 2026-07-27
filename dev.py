@@ -142,6 +142,18 @@ BUILD_TARGETS = [
     ("linux", "arm64", "bk_client-linux-arm64"),
 ]
 
+# Targets that require a special toolchain and are NOT produced by the normal
+# `dev.py build` cross-compile (which uses the modern go.mod). They are built
+# separately in CI (see build.yml) and merged in at release time. Packaging
+# includes them only when the corresponding binary is present.
+LEGACY_TARGETS = [
+    # Windows 7/8/8.1: Go >= 1.21 dropped support, so this is built with go1.20.
+    ("windows", "amd64", "bk_client-windows7-x86_64.exe"),
+]
+
+# Every binary that may appear in a release bundle (modern + legacy).
+ALL_TARGETS = BUILD_TARGETS + LEGACY_TARGETS
+
 
 def _kill_existing_dev_clients(binary: str) -> None:
     """Terminate dev Client processes left over from a previous ``run``.
@@ -155,7 +167,9 @@ def _kill_existing_dev_clients(binary: str) -> None:
         binary: The dev binary file name to terminate.
     """
     if os.name == "nt":
-        subprocess.run(["taskkill", "/F", "/IM", binary], capture_output=True, check=False)
+        subprocess.run(
+            ["taskkill", "/F", "/IM", binary], capture_output=True, check=False
+        )
     else:
         subprocess.run(["pkill", "-f", binary], capture_output=True, check=False)
 
@@ -291,10 +305,13 @@ def package(out_dir: str, version: str) -> str:
     zip_path = os.path.join(out_dir, "bk_client.zip")
 
     binaries = []
-    for goos, goarch, output in BUILD_TARGETS:
+    for goos, goarch, output in ALL_TARGETS:
         bin_path = os.path.join(out_dir, output)
         if not os.path.isfile(bin_path):
-            print(f"package: WARNING missing binary {output}, skipping in manifest")
+            # Legacy targets are optional (only present in full CI releases);
+            # only the standard cross-compiled targets are expected every time.
+            if (goos, goarch, output) in BUILD_TARGETS:
+                print(f"package: WARNING missing binary {output}, skipping in manifest")
             continue
         binaries.append(
             {
@@ -319,7 +336,9 @@ def package(out_dir: str, version: str) -> str:
     return zip_path
 
 
-def _write_release_zip(zip_path: str, root: str, out_dir: str, binaries: list[dict], manifest: dict) -> None:
+def _write_release_zip(
+    zip_path: str, root: str, out_dir: str, binaries: list[dict], manifest: dict
+) -> None:
     """Write the release zip with binaries, tools, docs, icons and manifest.
 
     Members are nested under *root*/ when *root* is non-empty; pass an empty
@@ -341,7 +360,9 @@ def _write_release_zip(zip_path: str, root: str, out_dir: str, binaries: list[di
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         # Platform binaries.
         for entry in binaries:
-            zf.write(os.path.join(out_dir, entry["filename"]), f"{prefix}{entry['filename']}")
+            zf.write(
+                os.path.join(out_dir, entry["filename"]), f"{prefix}{entry['filename']}"
+            )
 
         # Bundled recipes + their manifests (skip caches/helpers).
         _add_dir_to_zip(zf, TOOLS_DIR, f"{prefix}tools", _keep_tool)
@@ -498,7 +519,7 @@ def release(args: argparse.Namespace) -> None:
     print(f"Blendkit-Client v{version} builds ready in {out_dir}.")
     zip_path = package(out_dir, version)
 
-    for _, _, output in BUILD_TARGETS:
+    for _, _, output in ALL_TARGETS:
         bin_path = os.path.join(out_dir, output)
         if os.path.isfile(bin_path):
             os.remove(bin_path)
@@ -699,11 +720,17 @@ def main():
     parser = argparse.ArgumentParser(description="Blendkit-Client developer helper.")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_build = sub.add_parser("build", help="Cross-compile the Client for all platforms.")
-    p_build.add_argument("--out", default="out", help="Output directory (default: ./out).")
+    p_build = sub.add_parser(
+        "build", help="Cross-compile the Client for all platforms."
+    )
+    p_build.add_argument(
+        "--out", default="out", help="Output directory (default: ./out)."
+    )
     p_build.set_defaults(func=build)
 
-    p_run = sub.add_parser("run", help="Build for the current platform and run the Client standalone.")
+    p_run = sub.add_parser(
+        "run", help="Build for the current platform and run the Client standalone."
+    )
     p_run.add_argument(
         "client_args",
         nargs=argparse.REMAINDER,
@@ -716,19 +743,33 @@ def main():
         help="Run live integration tests against a real server (creds from .env).",
     ).set_defaults(func=live)
 
-    p_verify = sub.add_parser("verify", help="Verify signing/notarization of built binaries.")
+    p_verify = sub.add_parser(
+        "verify", help="Verify signing/notarization of built binaries."
+    )
     p_verify.add_argument("path", help="Directory containing the bk_client-* binaries.")
     p_verify.set_defaults(func=verify)
 
     p_release = sub.add_parser("release", help="Make release from prebuilt binaries.")
-    p_release.add_argument("--prebuilt-bin-dir", help="Directory containing prebuilt binaries.")
-    p_release.add_argument("--out", default="out", help="Output directory (default: ./out).")
+    p_release.add_argument(
+        "--prebuilt-bin-dir", help="Directory containing prebuilt binaries."
+    )
+    p_release.add_argument(
+        "--out", default="out", help="Output directory (default: ./out)."
+    )
     p_release.set_defaults(func=release)
 
-    sub.add_parser("test", help="Run Go unit tests and lint Python recipes.").set_defaults(func=test)
-    sub.add_parser("lint", help="Lint Python recipes (ruff + pydoclint).").set_defaults(func=lint)
-    sub.add_parser("format", help="Format/auto-fix Python recipes with ruff.").set_defaults(func=format_code)
-    sub.add_parser("docs", help="Regenerate API documentation (go generate).").set_defaults(func=docs)
+    sub.add_parser(
+        "test", help="Run Go unit tests and lint Python recipes."
+    ).set_defaults(func=test)
+    sub.add_parser("lint", help="Lint Python recipes (ruff + pydoclint).").set_defaults(
+        func=lint
+    )
+    sub.add_parser(
+        "format", help="Format/auto-fix Python recipes with ruff."
+    ).set_defaults(func=format_code)
+    sub.add_parser(
+        "docs", help="Regenerate API documentation (go generate)."
+    ).set_defaults(func=docs)
 
     args = parser.parse_args()
     args.func(args)
