@@ -13,6 +13,10 @@ name: PR version bump
 # major or minor above the base branch (e.g. 1.12.0 -> 1.13.0), the workflow
 # leaves VERSION untouched instead of forcing a patch bump over it.
 #
+# openapi.json and API.md embed the version, so this workflow also regenerates
+# them (go generate) and commits them with VERSION, keeping the api-docs drift
+# check green.
+#
 # The bump commit is pushed with the default GITHUB_TOKEN, which by design does
 # NOT re-trigger workflows, so there is no infinite loop. Fork PRs are skipped
 # because the token cannot push to a fork's branch.
@@ -40,7 +44,12 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Bump patch version in client/VERSION
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: client/go.mod
+          cache-dependency-path: client/go.sum
+
+      - name: Bump patch version and refresh API docs
         run: |
           set -euo pipefail
 
@@ -49,7 +58,7 @@ jobs:
           # is belt-and-suspenders in case the repo ever switches to a PAT.
           head_msg=$(git log -1 --pretty=%s)
           case "$head_msg" in
-            "ci: bump patch version to "*)
+            "ci: bump version to "*)
               echo "Head commit is a version bump; skipping to avoid a cycle."
               exit 0
               ;;
@@ -74,25 +83,32 @@ jobs:
           done
 
           # Respect a deliberate major/minor bump: if the PR already raised the
-          # major or minor above the base branch, leave VERSION as the author
-          # set it instead of forcing a patch bump over the intended release.
+          # major or minor above the base branch, keep the author's number.
+          # Otherwise force the patch to base + 1.
           if [ "$cM" -gt "$bM" ] || { [ "$cM" -eq "$bM" ] && [ "$cm" -gt "$bm" ]; }; then
             echo "PR raised major/minor above base ($base_ver -> $cur_ver); keeping it as-is."
+          else
+            next="${bM}.${bm}.$((bp + 1))"
+            if [ "$cur_ver" = "$next" ]; then
+              echo "client/VERSION already $next."
+            else
+              printf '%s\n' "$next" > client/VERSION
+              echo "Set client/VERSION to $next."
+            fi
+          fi
+
+          # openapi.json / API.md embed the version, so regenerate them to match
+          # VERSION. Without this the api-docs drift check fails on the bump.
+          ( cd client && go generate ./... )
+
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "VERSION and docs already up to date; nothing to commit."
             exit 0
           fi
 
-          next="${bM}.${bm}.$((bp + 1))"
-          echo "Target VERSION: $next"
-
-          if [ "$cur_ver" = "$next" ]; then
-            echo "client/VERSION is already $next; nothing to do."
-            exit 0
-          fi
-
-          printf '%s\n' "$next" > client/VERSION
-
+          final_ver=$(tr -d '[:space:]' < client/VERSION)
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add client/VERSION
-          git commit -m "ci: bump patch version to $next"
+          git add client/VERSION client/docs
+          git commit -m "ci: bump version to $final_ver"
           git push origin "HEAD:${{ github.head_ref }}"
