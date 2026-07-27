@@ -5,6 +5,14 @@ on:
     branches: [ main ]
   pull_request:
   workflow_dispatch:
+    inputs:
+      make_release:
+        description: "Publish a signed GitHub Release from this build?"
+        type: choice
+        options:
+          - "no"
+          - "publish"
+        default: "no"
 
 jobs:
   get_version:
@@ -43,7 +51,7 @@ jobs:
           name: bk_client-linux-arm64
           path: client/out/bk_client-linux-arm64
           archive: false
-      
+
   build_linux_x86_64:
     runs-on: ubuntu-24.04
     needs: get_version
@@ -175,7 +183,7 @@ jobs:
           merge-multiple: true
       - name: Display structure of downloaded files
         run: ls -R out/
-    
+
       ### MACOS CODE SIGN
 
       - name: Materialize p12 certificate
@@ -308,6 +316,8 @@ jobs:
 
   release:
     runs-on: macos-26
+    permissions:
+      contents: write
     needs: [code_sign_macos, code_sign_windows, get_version, build_linux_x86_64, build_linux_arm]
     steps:
       - uses: actions/checkout@v7
@@ -316,15 +326,15 @@ jobs:
           path: binaries/
           merge-multiple: true
       - run: ls -a binaries/
-      
-      - name: Install osslsigncode 
+
+      - name: Install osslsigncode
         run: brew install osslsigncode
 
       - run: chmod 755 binaries/bk_client-macos-arm64
       - run: chmod 755 binaries/bk_client-macos-x86_64
       - run: chmod 755 binaries/bk_client-linux-arm64
       - run: chmod 755 binaries/bk_client-linux-x86_64
-      
+
       - name: Build the release
         run: python dev.py release --prebuilt-bin-dir ./binaries
 
@@ -334,3 +344,16 @@ jobs:
           name: bk_client.zip
           path: out/v${{ needs.get_version.outputs.version }}/bk_client.zip
           archive: false
+
+      # Real release: run this workflow manually with make_release=publish.
+      # The tag v<version> (from client/VERSION) is created automatically at the
+      # triggering commit, so no manual tagging is needed.
+      - name: Publish signed GitHub Release
+        if: github.event_name == 'workflow_dispatch' && inputs.make_release == 'publish'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.get_version.outputs.version }}
+          name: bk_client v${{ needs.get_version.outputs.version }}
+          draft: false
+          fail_on_unmatched_files: true
+          files: out/v${{ needs.get_version.outputs.version }}/bk_client.zip
