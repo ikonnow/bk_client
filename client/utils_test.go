@@ -186,3 +186,22 @@ func TestServerToLocalFilename(t *testing.T) {
 		}
 	}
 }
+
+func TestValidSystemID(t *testing.T) {
+	tests := []struct {
+		id       string
+		expected bool
+	}{
+		{"123456789012345", true},
+		{"000000000000000", true},
+		{"12345678901234", false},   // 14 digits
+		{"1234567890123456", false}, // 16 digits
+		{"12345678901234a", false},  // non-digit
+		{"", false},
+	}
+	for _, test := range tests {
+		if actual := validSystemID(test.id); actual != test.expected {
+			t.Errorf("validSystemID(%q) = %v; want %v", test.id, actual, test.expected)
+		}
+	}
+}

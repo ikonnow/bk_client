@@ -1204,6 +1204,39 @@
         ]
       }
     },
+    "/report_event": {
+      "post": {
+        "description": "Fire-and-forget telemetry (e.g. login funnel events). The Client forwards the event to the server with standard headers in the background; failures are only logged, never surfaced to the UI.",
+        "operationId": "ReportEventHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `ReportEventData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "ReportEventData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Report a telemetry event",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/run_blender_script": {
       "post": {
         "description": "Runs a Python recipe under headless Blender. Used by external embedders (e.g. the Rhino plug-in) and available for the add-on's own background-script needs.",

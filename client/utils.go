@@ -62,6 +62,19 @@ func getSystemID() *string {
 	return &nodeStr
 }
 
+// validSystemID reports whether s has the expected system_id format: exactly 15 digits.
+func validSystemID(s string) bool {
+	if len(s) != 15 {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func StringToAddonVersion(s string) (*AddonVersionStruct, error) {
 	adVer := &AddonVersionStruct{}
 	if s == "" {
