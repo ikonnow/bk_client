@@ -158,8 +158,8 @@ func GetTokens(authCode string, refreshToken string, verificationData OAuth2Veri
 		return nil, -1, errMsg, details
 	}
 
-	req.Header = getHeaders("", *SystemID, verificationData.AddonVersion, verificationData.PlatformVersion) // Does not make sense to send old API key here
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")                                     // Overwrite Content-Type to "application/x-www-form-urlencoded"
+	req.Header = getHeaders("", *SystemID, verificationData.AddonVersion, verificationData.PlatformVersion, verificationData.AppID) // Does not make sense to send old API key here
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")                                                             // Overwrite Content-Type to "application/x-www-form-urlencoded"
 	resp, err := ClientAPI.Do(req)
 	if err != nil {
 		errMsg := fmt.Sprintf("Making request error: %v", err)
@@ -340,7 +340,7 @@ func RevokeOAuth2Token(data RefreshTokenData, tokenType string, ch chan error, w
 		return
 	}
 
-	req.Header = getHeaders("", *SystemID, data.AddonVersion, data.PlatformVersion)
+	req.Header = getHeaders("", *SystemID, data.AddonVersion, data.PlatformVersion, data.AppID)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded") // Overwrite Content-Type to "application/x-www-form-urlencoded"
 	resp, err := ClientAPI.Do(req)
 	if err != nil {

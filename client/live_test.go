@@ -83,7 +83,7 @@ func TestLiveSearchPublic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("building request: %v", err)
 	}
-	req.Header = getHeaders("", *getSystemID(), "0.0.0", "")
+	req.Header = getHeaders("", *getSystemID(), "0.0.0", "", 0)
 
 	resp, err := liveHTTPClient().Do(req)
 	if err != nil {
@@ -114,7 +114,7 @@ func TestLiveGetUserProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("building request: %v", err)
 	}
-	req.Header = getHeaders(key, *getSystemID(), "0.0.0", "")
+	req.Header = getHeaders(key, *getSystemID(), "0.0.0", "", 0)
 
 	resp, err := liveHTTPClient().Do(req)
 	if err != nil {

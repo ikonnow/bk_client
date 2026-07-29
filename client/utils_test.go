@@ -205,3 +205,53 @@ func TestValidSystemID(t *testing.T) {
 		}
 	}
 }
+
+func TestOriginNameForApp(t *testing.T) {
+	AvailableSoftwaresMux.Lock()
+	origMap := AvailableSoftwares
+	AvailableSoftwares = map[int]Software{4242: {Name: "Godot", AppID: 4242}}
+	AvailableSoftwaresMux.Unlock()
+	origStarting := StartingSoftwareName
+	blender := "Blender"
+	StartingSoftwareName = &blender
+	defer func() {
+		AvailableSoftwaresMux.Lock()
+		AvailableSoftwares = origMap
+		AvailableSoftwaresMux.Unlock()
+		StartingSoftwareName = origStarting
+	}()
+
+	if got := originNameForApp(4242); got != "Godot" {
+		t.Errorf("registered app: got %q, want Godot", got)
+	}
+	if got := originNameForApp(9999); got != "Blender" {
+		t.Errorf("unregistered app should fall back to starting software: got %q", got)
+	}
+	if got := originNameForApp(0); got != "" {
+		t.Errorf("internal request (appID 0) must have no origin: got %q", got)
+	}
+}
+
+func TestGetHeadersOriginName(t *testing.T) {
+	AvailableSoftwaresMux.Lock()
+	origMap := AvailableSoftwares
+	AvailableSoftwares = map[int]Software{4242: {Name: "Godot", AppID: 4242}}
+	AvailableSoftwaresMux.Unlock()
+	origStarting := StartingSoftwareName
+	StartingSoftwareName = nil
+	defer func() {
+		AvailableSoftwaresMux.Lock()
+		AvailableSoftwares = origMap
+		AvailableSoftwaresMux.Unlock()
+		StartingSoftwareName = origStarting
+	}()
+
+	headers := getHeaders("key", "000000000000042", "3.21.0", "Linux", 4242)
+	if got := headers.Get("Origin-Name"); got != "Godot" {
+		t.Errorf("Origin-Name: got %q, want Godot", got)
+	}
+	internal := getHeaders("key", "000000000000042", "3.21.0", "Linux", 0)
+	if _, present := internal["Origin-Name"]; present {
+		t.Errorf("internal request must not set Origin-Name, got %q", internal.Get("Origin-Name"))
+	}
+}

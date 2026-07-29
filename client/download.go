@@ -220,7 +220,7 @@ func doAssetDownload(
 	TasksMux.Unlock()
 
 	// GET URL FOR BLEND FILE WITH CORRECT RESOLUTION
-	canDownload, downloadURL, fileUploadSize, err := GetDownloadURL(sceneID, downloadAssetData.Files, downloadAssetData.Resolution, apiKey, addonVersion, platformVersion)
+	canDownload, downloadURL, fileUploadSize, err := GetDownloadURL(sceneID, downloadAssetData.Files, downloadAssetData.Resolution, apiKey, addonVersion, platformVersion, appID)
 	if err != nil {
 		TaskErrorCh <- &TaskError{
 			AppID:  appID,
@@ -546,8 +546,8 @@ func downloadAsset(url, filePath string, uploadFileSize int, appID int, addonVer
 		return err
 	}
 
-	req.Header = getHeaders("", *SystemID, addonVersion, platformVersion) // download requires no API key in headers
-	req.Header.Set("Cookie", "allow_compression=true")                    // allow compression (#1486)
+	req.Header = getHeaders("", *SystemID, addonVersion, platformVersion, appID) // download requires no API key in headers
+	req.Header.Set("Cookie", "allow_compression=true")                           // allow compression (#1486)
 	resp, err := ClientDownloads.Do(req)
 	if err != nil {
 		e := DeleteFile(filePath)
@@ -685,7 +685,7 @@ func GetDownloadFilepaths(downloadAssetData DownloadAssetData, downloadDirs []st
 // canDownload - true if the file can be downloaded, false otherwise
 // downloadURL - https://assets.blendkit.com/assets/.../file.blend?verify=...
 // fileUploadSize - size of the file to download
-func GetSignedURL(sceneID string, file AssetFile, apiKey, addonVersion, platformVersion string) (bool, string, int, error) {
+func GetSignedURL(sceneID string, file AssetFile, apiKey, addonVersion, platformVersion string, appID int) (bool, string, int, error) {
 	reqData := url.Values{}
 	reqData.Set("scene_uuid", sceneID)
 
@@ -693,7 +693,7 @@ func GetSignedURL(sceneID string, file AssetFile, apiKey, addonVersion, platform
 	if err != nil {
 		return false, "", 0, err
 	}
-	req.Header = getHeaders(apiKey, *SystemID, addonVersion, platformVersion)
+	req.Header = getHeaders(apiKey, *SystemID, addonVersion, platformVersion, appID)
 	req.URL.RawQuery = reqData.Encode()
 
 	resp, err := ClientAPI.Do(req)
@@ -728,9 +728,9 @@ func GetSignedURL(sceneID string, file AssetFile, apiKey, addonVersion, platform
 
 // GetDownloadURL selects the best file for the given resolution and fetches a signed CDN URL.
 // Kept for Blender add-on compatibility.
-func GetDownloadURL(sceneID string, files []AssetFile, resolution string, apiKey, addonVersion, platformVersion string) (bool, string, int, error) {
+func GetDownloadURL(sceneID string, files []AssetFile, resolution string, apiKey, addonVersion, platformVersion string, appID int) (bool, string, int, error) {
 	file, _ := GetResolutionFile(files, resolution)
-	return GetSignedURL(sceneID, file, apiKey, addonVersion, platformVersion)
+	return GetSignedURL(sceneID, file, apiKey, addonVersion, platformVersion, appID)
 }
 
 // selectAssetFile picks the best AssetFile using the modelFormat preference,

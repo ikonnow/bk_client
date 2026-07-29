@@ -210,7 +210,7 @@ func NonblockingRequest(data NonblockingRequestTaskData) {
 		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskID, Error: es}
 		return
 	}
-	req.Header = getHeaders(data.ApiKey, *SystemID, data.AddonVersion, data.PlatformVersion)
+	req.Header = getHeaders(data.ApiKey, *SystemID, data.AddonVersion, data.PlatformVersion, data.AppID)
 	for key, value := range data.Headers {
 		req.Header.Set(key, value)
 	}

@@ -262,7 +262,7 @@ func DebugRequest(client *http.Client, url string, headers [][]string, tCoeff in
 	}
 
 	platformVersion := GetPlatformVersion()
-	req.Header = getHeaders("", *SystemID, *StartingAddonVersion, platformVersion)
+	req.Header = getHeaders("", *SystemID, *StartingAddonVersion, platformVersion, 0)
 
 	for i := range headers {
 		if len(headers[i]) < 2 {
