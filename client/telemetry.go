@@ -53,7 +53,7 @@ func forwardEvent(data ReportEventData) {
 		BKLog.Printf("Telemetry event %q: cannot create request: %v", data.Event, err)
 		return
 	}
-	req.Header = getHeaders(data.ApiKey, *SystemID, data.AddonVersion, data.PlatformVersion)
+	req.Header = getHeaders(data.ApiKey, *SystemID, data.AddonVersion, data.PlatformVersion, data.AppID)
 
 	resp, err := ClientAPI.Do(req)
 	if err != nil {

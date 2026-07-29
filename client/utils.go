@@ -38,17 +38,43 @@ import (
 
 // GetHeaders returns a set of HTTP headers to be used in requests to the server.
 // These are the default headers which should be set to all requests of client to the server.
-func getHeaders(apiKey, systemID, addonVersion, platformVersion string) http.Header {
+// appID identifies the host software the request is made for; pass 0 for the
+// Client's own internal requests, which then carry no Origin-Name header.
+func getHeaders(apiKey, systemID, addonVersion, platformVersion string, appID int) http.Header {
 	headers := http.Header{}
 	headers.Set("Content-Type", "application/json")
 	headers.Set("Platform-Version", platformVersion)
 	headers.Set("System-ID", systemID)
 	headers.Set("Addon-Version", addonVersion)
 	headers.Set("Client-Version", ClientVersion)
+	if origin := originNameForApp(appID); origin != "" {
+		headers.Set("Origin-Name", origin)
+	}
 	if apiKey != "" {
 		headers.Set("Authorization", "Bearer "+apiKey)
 	}
 	return headers
+}
+
+// originNameForApp resolves the name of the host software ("Blender", "Godot", ...)
+// a request is made for. One Client serves multiple hosts at once, so the name is
+// looked up per request by appID. Falls back to the software that started the
+// Client when the appID has not (yet) registered in AvailableSoftwares - e.g. the
+// first requests right after startup. Returns "" for appID 0 (internal requests).
+func originNameForApp(appID int) string {
+	if appID == 0 {
+		return ""
+	}
+	AvailableSoftwaresMux.Lock()
+	sw, ok := AvailableSoftwares[appID]
+	AvailableSoftwaresMux.Unlock()
+	if ok && sw.Name != "" {
+		return sw.Name
+	}
+	if StartingSoftwareName != nil {
+		return *StartingSoftwareName
+	}
+	return ""
 }
 
 // GetSystemID returns the NodeID of the machine as string of 15 integers.

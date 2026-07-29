@@ -9,10 +9,11 @@ import (
 )
 
 func TestForwardEventPostsToServerWithHeaders(t *testing.T) {
-	var gotPath, gotSystemID, gotBody string
+	var gotPath, gotSystemID, gotOrigin, gotBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotSystemID = r.Header.Get("System-Id")
+		gotOrigin = r.Header.Get("Origin-Name")
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(r.Body)
 		gotBody = buf.String()
@@ -26,6 +27,16 @@ func TestForwardEventPostsToServerWithHeaders(t *testing.T) {
 	Server = &serverURL
 	ClientAPI = server.Client()
 
+	AvailableSoftwaresMux.Lock()
+	origSoftwares := AvailableSoftwares
+	AvailableSoftwares = map[int]Software{1: {Name: "Blender", AppID: 1}}
+	AvailableSoftwaresMux.Unlock()
+	defer func() {
+		AvailableSoftwaresMux.Lock()
+		AvailableSoftwares = origSoftwares
+		AvailableSoftwaresMux.Unlock()
+	}()
+
 	forwardEvent(ReportEventData{
 		AppID:           1,
 		AddonVersion:    "3.21.0.250101",
@@ -36,6 +47,9 @@ func TestForwardEventPostsToServerWithHeaders(t *testing.T) {
 
 	if gotPath != "/api/v1/telemetry/events/" {
 		t.Errorf("posted to %q; want /api/v1/telemetry/events/", gotPath)
+	}
+	if gotOrigin != "Blender" {
+		t.Errorf("Origin-Name header: got %q, want Blender", gotOrigin)
 	}
 	if gotSystemID == "" {
 		t.Error("System-Id header not set")
