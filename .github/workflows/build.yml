@@ -456,22 +456,139 @@ jobs:
         id: blenderBinaryCache
         uses: actions/cache@v6
         with:
-          path: /home/runner/blender
+          path: $HOME/blender
           key: blender-${{matrix.version}}-${{matrix.sha}}
       - name: Check Blender binary exists
         id: blenderBinaryCheck
-        run: test -f /home/runner/blender/blender || echo "BLENDER_BINARY_MISSING=true" >> $GITHUB_OUTPUT
+        run: test -f $HOME/blender/blender || echo "BLENDER_BINARY_MISSING=true" >> $GITHUB_OUTPUT
       - name: Download Blender
         if: steps.blenderBinaryCheck.outputs.BLENDER_BINARY_MISSING == 'true'
-        run: curl -fL ${{ matrix.download_url }} -o /home/runner/blender.tar.xz
+        run: curl -fL ${{ matrix.download_url }} -o $HOME/blender.tar.xz
       - name: Mkdir
-        run: mkdir {/home/runner/.local/bin,/home/runner/blender} -p
+        run: mkdir {$HOME/.local/bin,$HOME/blender} -p
       - name: Extract Blender
         if: steps.blenderBinaryCheck.outputs.BLENDER_BINARY_MISSING == 'true'
-        run: tar -xf /home/runner/blender.tar.xz -C /home/runner/blender --strip-components=1
+        run: tar -xf $HOME/blender.tar.xz -C $HOME/blender --strip-components=1
       - name: Add Blender to PATH
-        run: ln -s /home/runner/blender/blender /home/runner/.local/bin/blender
+        run: ln -s $HOME/blender/blender $HOME/.local/bin/blender
       - name: TEST
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python dev.py test --install-at /home/runner/.config/blender/${{matrix.version_x_y}}/scripts/addons 
+        run: python dev.py test --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons 
+
+
+  blenderkit_TESTS_debian_x86_64:
+    needs: [make_blenderkit_tests_matrix, build_linux_x86_64, get_version]
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    container: debian:latest
+    strategy:
+      matrix: ${{ fromJSON(needs.make_blenderkit_tests_matrix.outputs.matrix) }}
+    steps:
+      - run: apt update
+      - run: apt install -y python3 curl xz-utils git libxrender1 libxxf86vm1 libxi6 libxfixes3 libxkbcommon0 libsm6 libgl1
+      - run: git config --global --add safe.directory $PWD
+      
+      - uses: actions/checkout@v7
+        with:
+          repository: blenderkit/blenderkit
+      - uses: actions/download-artifact@v8
+        with:
+          name: bk_client-linux-x86_64
+          path: prebuilt
+      
+      - run: echo $VERSION > prebuilt/VERSION
+        env:
+          VERSION: ${{ needs.get_version.outputs.version }}
+      - run: ls prebuilt
+      - run: cat prebuilt/VERSION
+      
+      - name: Checkout bk_proxor submodule
+        run: git submodule update --init bk_proxor
+
+      - name: Single binary build
+        run: python3 dev.py build --client-build prebuilt
+
+      - name: Cache Blender
+        id: blenderBinaryCache
+        uses: actions/cache@v6
+        with:
+          path: $HOME/blender
+          key: blender-${{matrix.version}}-${{matrix.sha}}
+      - name: Mkdir
+        run: mkdir $HOME/blender -p
+      - name: Check Blender binary exists
+        id: blenderBinaryCheck
+        run: test -f $HOME/blender/blender || echo "BLENDER_BINARY_MISSING=true" >> $GITHUB_OUTPUT
+      - name: Download Blender
+        if: steps.blenderBinaryCheck.outputs.BLENDER_BINARY_MISSING == 'true'
+        run: curl -fL ${{ matrix.download_url }} -o $HOME/blender.tar.xz
+      - name: Extract Blender
+        if: steps.blenderBinaryCheck.outputs.BLENDER_BINARY_MISSING == 'true'
+        run: tar -xf $HOME/blender.tar.xz -C $HOME/blender --strip-components=1
+
+      - run: echo $PATH
+      - name: Add Blender to PATH
+        run: ln -s $HOME/blender/blender /usr/local/bin/blender
+
+      - name: TEST
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 dev.py test --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons
+
+  blenderkit_TESTS_fedora_x86_64:
+    needs: [make_blenderkit_tests_matrix, build_linux_x86_64, get_version]
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    strategy:
+      matrix: ${{ fromJSON(needs.make_blenderkit_tests_matrix.outputs.matrix) }}
+    steps:
+      - run: dnf install -y git libXrender libXxf86vm libXi libXfixes mesa-libGL libxkbcommon libSM
+      - run: git config --global --add safe.directory $PWD
+      - uses: actions/checkout@v7
+        with:
+          repository: blenderkit/blenderkit
+      - uses: actions/download-artifact@v8
+        with:
+          name: bk_client-linux-x86_64
+          path: prebuilt
+      
+      - run: echo $VERSION > prebuilt/VERSION
+        env:
+          VERSION: ${{ needs.get_version.outputs.version }}
+      - run: ls prebuilt
+      - run: cat prebuilt/VERSION
+      
+      - name: Checkout bk_proxor submodule
+        run: git submodule update --init bk_proxor
+
+      - name: Single binary build
+        run: python dev.py build --client-build prebuilt
+
+      - name: Cache Blender
+        id: blenderBinaryCache
+        uses: actions/cache@v6
+        with:
+          path: $HOME/blender
+          key: blender-${{matrix.version}}-${{matrix.sha}}
+      - name: Mkdir
+        run: mkdir $HOME/blender -p
+      - name: Check Blender binary exists
+        id: blenderBinaryCheck
+        run: test -f $HOME/blender/blender || echo "BLENDER_BINARY_MISSING=true" >> $GITHUB_OUTPUT
+      - name: Download Blender
+        if: steps.blenderBinaryCache.outputs.cache-hit != 'true'
+        run: curl -fL ${{ matrix.download_url }} -o $HOME/blender.tar.xz
+      - name: Extract Blender
+        if: steps.blenderBinaryCache.outputs.cache-hit != 'true'
+        run: tar -xf $HOME/blender.tar.xz -C $HOME/blender --strip-components=1
+      
+      - run: echo $PATH
+      - name: Add Blender to PATH
+        run: ln -s $HOME/blender/blender /usr/local/bin/blender
+
+      - name: TEST
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python dev.py test --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons 
