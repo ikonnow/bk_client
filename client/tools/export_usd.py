@@ -14,10 +14,16 @@ Recipe ABI:
         max_resolution : str  (optional) - "512"/"1024"/"2048"/"4096"/"8192"/"ORIGINAL"
                                           used to pick the textures subfolder
                                           suffix (mirrors Blendkit addon)
+        export_mtlx    : bool (optional, default True) - also emit standalone
+                                          .mtlx materials into ``<stem>_mtlx/``
+                                          and a ``<stem>.materials.json`` mapping
+                                          (via the vendored bk_mtlx exporter;
+                                          skipped if MaterialX is unavailable)
 
 Stdout protocol (consumed by bk_maya.core.blender_runner)::
     BK_STATUS   <stage>
     BK_PROGRESS <0..1> <msg>
+    BK_ARTIFACT <path>   (side outputs, e.g. the MaterialX mapping JSON)
     BK_DONE     <path>
     BK_ERROR    <msg>
 """
@@ -68,6 +74,18 @@ def done(path: str) -> None:
         path: A string representing the path of the completed export.
     """
     _emit("BK_DONE", path)
+
+
+def artifact(path: str) -> None:
+    """Emit a side-artifact path (e.g. the MaterialX mapping JSON).
+
+    Distinct from BK_DONE (which marks the single primary output) so the
+    consumer can pick up extra files without mistaking them for completion.
+
+    Args:
+        path: A string path to a produced side artifact.
+    """
+    _emit("BK_ARTIFACT", path)
 
 
 def error(msg: str) -> None:
@@ -846,6 +864,155 @@ def _sanitize_meshes_for_usd_export() -> None:
 
 
 # ---------------------------------------------------------------------------
+# MaterialX sidecar export (vendored bl_mtlx exporter)
+# ---------------------------------------------------------------------------
+# Blender's native wm.usd_export MaterialX network only covers the subset of
+# nodes it can map to a UsdPreviewSurface-equivalent graph. The vendored
+# bl_mtlx exporter emits a far richer standalone .mtlx per material (image /
+# math / mix / ramp / noise / voronoi / displacement / ...). We export those
+# alongside the .usd plus a name-keyed JSON sidecar so the consumer (Maya
+# mayaUsd / MaterialX) can bind the high-fidelity materials onto the same
+# geometry, matched by material name.
+#
+# The compiled ``MaterialX`` (PyMaterialX) package is NOT bundled — it ships
+# with Blender 4.1+. If it is missing we skip this step and still emit the USD.
+
+
+def _safe_filename(name: str) -> str:
+    """Return *name* reduced to a filesystem/USD-safe token (ascii, no spaces)."""
+    out = [ch if (ch.isalnum() or ch in ("_", "-")) else "_" for ch in name]
+    return "".join(out).strip("_") or "Unnamed"
+
+
+def _load_mtlx_exporter():
+    """Import the vendored bl_mtlx exporter under its unique package name.
+
+    Returns the ``export_material_to_materialx`` callable, or ``None`` if the
+    package (or its compiled ``MaterialX`` dependency) is unavailable. Loaded
+    as ``bk_mtlx`` so it never clashes with the ``material_x`` add-on when that
+    is also enabled in Blender.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    try:
+        from bk_mtlx.blender_materialx_exporter import export_material_to_materialx
+    except ImportError as exc:
+        log(f"mtlx: exporter/MaterialX unavailable ({exc}); skipping .mtlx export")
+        return None
+    return export_material_to_materialx
+
+
+def export_materialx_sidecar(out_usd: str) -> dict:
+    """Export one ``.mtlx`` per used material next to *out_usd* + a mapping JSON.
+
+    Layout (all relative to the .usd directory)::
+        <stem>_mtlx/<Material>.mtlx
+        <stem>_mtlx/textures/<image files>
+        <stem>.materials.json
+
+    The JSON is keyed by Blender material name (what wm.usd_export names the
+    UsdShade Material prim after), so the consumer can bind by name. Returns
+    the mapping dict that was written (or a minimal dict when skipped).
+    """
+    out_dir = os.path.dirname(os.path.abspath(out_usd)) or "."
+    stem = os.path.splitext(os.path.basename(out_usd))[0]
+    mtlx_dirname = f"{stem}_mtlx"
+    mtlx_dir = os.path.join(out_dir, mtlx_dirname)
+    json_path = os.path.join(out_dir, f"{stem}.materials.json")
+
+    mapping: dict = {
+        "usd": os.path.basename(out_usd),
+        "generated_by": "export_usd.py",
+        "materialx_available": False,
+        "mtlx_dir": mtlx_dirname,
+        "materials": [],
+    }
+
+    exporter = _load_mtlx_exporter()
+    if exporter is None:
+        # Still write the sidecar so the consumer can detect the absence.
+        with open(json_path, "w", encoding="utf-8") as fh:
+            json.dump(mapping, fh, indent=2)
+        artifact(json_path)
+        return mapping
+
+    mapping["materialx_available"] = True
+
+    # A quiet logger — the exporter is extremely chatty at INFO level.
+    import logging
+
+    mtlx_logger = logging.getLogger("bk_mtlx_export")
+    mtlx_logger.setLevel(logging.WARNING)
+    if not mtlx_logger.handlers:
+        h = logging.StreamHandler(stream=sys.stdout)
+        h.setFormatter(logging.Formatter("[bk_mtlx] %(message)s"))
+        mtlx_logger.addHandler(h)
+
+    os.makedirs(mtlx_dir, exist_ok=True)
+
+    # Which mesh objects each material is bound to (captured before the later
+    # destructive split/force-single passes mutate the slots). Convenience
+    # data for the consumer; binding is ultimately matched by name.
+    meshes_by_mat: dict[str, list[str]] = {}
+    for obj in bpy.context.scene.objects:
+        if obj.type != "MESH" or obj.data is None:
+            continue
+        for slot in obj.data.materials:
+            if slot is not None:
+                meshes_by_mat.setdefault(slot.name, []).append(obj.name)
+
+    options = {
+        "export_textures": True,
+        "copy_textures": True,
+        "texture_folder_name": "textures",
+        "materialx_version": "1.39",
+        "active_uvmap": "UVMap",
+        "strict_mode": False,  # one bad material must not abort the batch
+        "optimize_document": True,
+        "advanced_validation": False,
+        "performance_monitoring": False,
+    }
+
+    materials = [m for m in bpy.data.materials if m.users > 0 and m.use_nodes]
+    total = len(materials)
+    log(f"mtlx: exporting {total} material(s) -> {mtlx_dir}")
+    exported = 0
+    for i, mat in enumerate(materials):
+        fname = f"{_safe_filename(mat.name)}.mtlx"
+        out_path = os.path.join(mtlx_dir, fname)
+        entry: dict = {
+            "name": mat.name,
+            "mtlx_file": f"{mtlx_dirname}/{fname}",
+            "mtlx_material": mat.name,
+            "meshes": meshes_by_mat.get(mat.name, []),
+            "success": False,
+        }
+        try:
+            result = exporter(mat, out_path, mtlx_logger, options)
+            entry["success"] = bool(result.get("success"))
+            unsupported = result.get("unsupported_nodes") or []
+            if unsupported:
+                entry["unsupported_nodes"] = unsupported
+            if result.get("error"):
+                entry["error"] = str(result["error"])
+            if entry["success"]:
+                exported += 1
+        except Exception as exc:  # never let one material abort the recipe
+            entry["error"] = str(exc)
+            log(f"mtlx: FAILED for {mat.name!r}: {exc}")
+        mapping["materials"].append(entry)
+        if total:
+            progress(0.62 + 0.06 * (i + 1) / total, f"mtlx {i + 1}/{total}")
+
+    with open(json_path, "w", encoding="utf-8") as fh:
+        json.dump(mapping, fh, indent=2)
+    log(f"mtlx: exported {exported}/{total} material(s); wrote {json_path}")
+    artifact(json_path)
+    return mapping
+
+
+# ---------------------------------------------------------------------------
 # Main export
 # ---------------------------------------------------------------------------
 
@@ -924,7 +1091,13 @@ def _prepare_material_asset(asset_name: str = "", asset_id: str = "") -> bool:
 
 
 def export_to_usd(
-    blend_path: str, out_usd: str, asset_type: str = "model", asset_name: str = "", asset_id: str = ""
+    blend_path: str,
+    out_usd: str,
+    asset_type: str = "model",
+    asset_name: str = "",
+    asset_id: str = "",
+    *,
+    export_mtlx: bool = True,
 ) -> None:
     """Export a .blend to .usd with the necessary pre-processing for Maya compatibility.
 
@@ -934,6 +1107,7 @@ def export_to_usd(
       asset_type: Blendkit asset type ("material" gets a preview-mesh step)
       asset_name: asset display name (used to locate the asset material)
       asset_id: Blendkit asset id (used to locate the asset material)
+      export_mtlx: also emit standalone .mtlx materials + a mapping JSON
     """
     status("Opening blend")
     bpy.ops.wm.open_mainfile(filepath=blend_path)
@@ -964,6 +1138,17 @@ def export_to_usd(
     status("Renaming shader nodes")
     _rename_shader_nodes_to_material()
     progress(0.48, "Renamed shader nodes")
+
+    # Emit standalone MaterialX materials + mapping JSON while the material
+    # graphs are still intact (the destructive split/force-single passes below
+    # drop material slots). Skipped gracefully if MaterialX is unavailable.
+    if export_mtlx:
+        status("Exporting MaterialX")
+        try:
+            export_materialx_sidecar(out_usd)
+        except Exception as exc:  # never let mtlx failure abort the USD export
+            log(f"mtlx: sidecar export failed (non-fatal): {exc}")
+        progress(0.60, "MaterialX exported")
 
     # Save the relocated paths so wm.usd_export resolves them off disk
     # (no longer reads from packed bytes).
@@ -1091,6 +1276,7 @@ def main() -> int:
             asset_type=str(params.get("asset_type") or "model"),
             asset_name=str(params.get("asset_name") or ""),
             asset_id=str(params.get("asset_id") or ""),
+            export_mtlx=bool(params.get("export_mtlx", True)),
         )
     except Exception as exc:
         error(f"export failed: {exc}")
