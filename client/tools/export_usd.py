@@ -915,7 +915,8 @@ def _fix_mtlx_normal_maps(mtlx_path: str) -> int:
     ``<normalmap>`` node. Returns the number of connections fixed.
     """
     try:
-        tree = ET.parse(mtlx_path)
+        # Parsing our own generated, trusted .mtlx (not untrusted input).
+        tree = ET.parse(mtlx_path)  # noqa: S314  # nosec B314
     except (ET.ParseError, OSError) as exc:
         log(f"mtlx-fix: could not parse {os.path.basename(mtlx_path)} ({exc})")
         return 0
@@ -946,10 +947,9 @@ def _fix_mtlx_normal_maps(mtlx_path: str) -> int:
             fixed += 1
 
     if fixed:
-        try:
+        # ET.indent is 3.9+, headless Blender is newer — but be safe
+        with contextlib.suppress(AttributeError):
             ET.indent(tree, space="  ")
-        except AttributeError:
-            pass  # ET.indent is 3.9+, headless Blender is newer — but be safe
         tree.write(mtlx_path, encoding="unicode", xml_declaration=True)
         log(f"mtlx-fix: repaired {fixed} normal-map connection(s) in {os.path.basename(mtlx_path)}")
     return fixed
@@ -1369,9 +1369,7 @@ def export_to_usd(
     # <stem>.usda composes the crate + references our .mtlx and becomes the
     # file Maya loads. Otherwise export straight to out_usd with inline mtlx.
     use_refs = bool(
-        mtlx_references
-        and mtlx_mapping
-        and any(e.get("success") for e in mtlx_mapping.get("materials", []))
+        mtlx_references and mtlx_mapping and any(e.get("success") for e in mtlx_mapping.get("materials", []))
     )
     geom_rel = f"./{os.path.basename(out_usd)}"
     wrapper_usda = os.path.splitext(out_usd)[0] + ".usda"
