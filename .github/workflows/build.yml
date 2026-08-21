@@ -496,7 +496,7 @@ jobs:
       - name: TEST
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python dev.py test --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons
+        run: python dev.py test --client-build prebuilt --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons 
 
 
   blenderkit_TESTS_debian_x86_64:
@@ -560,7 +560,7 @@ jobs:
       - name: TEST
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 dev.py test --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons
+        run: python3 dev.py test --client-build prebuilt --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons
 
   blenderkit_TESTS_fedora_x86_64:
     needs: [make_blenderkit_tests_matrix, build_linux_x86_64, get_version]
@@ -621,4 +621,4 @@ jobs:
       - name: TEST
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python dev.py test --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons
+        run: python dev.py test --client-build prebuilt --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons 
