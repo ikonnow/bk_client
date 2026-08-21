@@ -2281,6 +2281,7 @@ func CreateComment(data CreateCommentData) {
 		Timestamp:    commentsData.Form.Timestamp,
 		SecurityHash: commentsData.Form.SecurityHash,
 		Comment:      data.CommentText,
+		IsValidation: data.IsValidation,
 	}
 	uploadDataJSON, err := json.Marshal(uploadData)
 	if err != nil {
