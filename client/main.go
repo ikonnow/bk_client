@@ -507,17 +507,11 @@ func main() {
 	mux.HandleFunc("/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 	mux.HandleFunc("/"+vapi+"/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 
-	// Show a system tray icon whenever the platform supports one — both for
-	// standalone Clients and for add-on-spawned ones — so the running Client
-	// is always visible and quittable. The HTTP server runs in a background
-	// goroutine and the tray loop owns the main goroutine. On platforms
-	// without tray support the server blocks here exactly as before.
-	if traySupported {
-		go StartClient(mux)
-		runTray(*Server, fmt.Sprintf("localhost:%s", *Port))
-		return
-	}
-	StartClient(mux)
+	// Show a system tray icon for standalone Clients and for add-on-spawned ones -
+	// so the running Client is always visible and quittable.
+	// The HTTP server runs in a background goroutine and the tray loop owns the main goroutine.
+	go StartClient(mux)
+	runTray(*Server, fmt.Sprintf("localhost:%s", *Port))
 }
 
 // Start Client server on localhost, if this address cannot be used then it falls back to IPv4 127.0.0.1.

@@ -1,5 +1,3 @@
-//go:build windows
-
 /*##### BEGIN GPL LICENSE BLOCK #####
 
   This program is free software; you can redistribute it and/or
@@ -25,14 +23,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 
 	"fyne.io/systray"
 )
-
-// traySupported reports that a system tray icon can be shown on this platform.
-// On Windows the systray implementation is pure Go (no cgo), so it builds with
-// the same CGO_ENABLED=0 cross-compile used for the shipped binaries.
-const traySupported = true
 
 //go:embed icons/blendkit.ico
 var trayIcon []byte
@@ -46,7 +40,6 @@ var trayIcon []byte
 func runTray(serverURL, listenAddr string) {
 	onReady := func() {
 		systray.SetIcon(trayIcon)
-		systray.SetTitle("Blendkit-Client")
 		systray.SetTooltip(fmt.Sprintf("Blendkit-Client v%s — %s", ClientVersion, listenAddr))
 
 		mVersion := systray.AddMenuItem(fmt.Sprintf("Blendkit-Client v%s", ClientVersion), "")
@@ -90,9 +83,24 @@ func runTray(serverURL, listenAddr string) {
 	systray.Run(onReady, onExit)
 }
 
-// openInBrowser opens the given URL in the default web browser on Windows.
+// openInBrowser opens the given URL in the default web browser on Windows, MacOS and Linux.
 func openInBrowser(url string) {
-	if err := exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start(); err != nil {
+	var cmd string
+	var args []string
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "rundll32"
+		args = []string{"url.dll,FileProtocolHandler", url}
+	case "darwin":
+		cmd = "open"
+		args = []string{url}
+	default: // WSL is not a valid use case, so we do not handle it in here
+		cmd = "xdg-open"
+		args = []string{url}
+	}
+
+	err := exec.Command(cmd, args...).Start()
+	if err != nil {
 		BKLog.Printf("%s Could not open browser for %s: %v", EmoWarning, url, err)
 	}
 }
