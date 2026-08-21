@@ -53,7 +53,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=0 go build -o out/bk_client-linux-arm64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-linux-arm64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-linux-arm64
@@ -76,7 +76,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=0 go build -o out/bk_client-linux-x86_64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-linux-x86_64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-linux-x86_64
@@ -99,7 +99,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=0 go build -o out/bk_client-macos-arm64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-macos-arm64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-macos-arm64
@@ -122,7 +122,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=0 go build -o out/bk_client-macos-x86_64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-macos-x86_64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-macos-x86_64
@@ -207,7 +207,7 @@ jobs:
       - name: Build Blendkit_Client (Windows 7 x86_64)
         working-directory: ./client
         env:
-          CGO_ENABLED: '0'
+          CGO_ENABLED: '1'
           GOOS: windows
           GOARCH: amd64
         run: go build -o out/bk_client-windows7-x86_64.exe -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
