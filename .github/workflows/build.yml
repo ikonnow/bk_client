@@ -406,6 +406,19 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: bk_client.zip
+          path: release
+      - name: Locate release ZIP
+        id: findzip
+        run: |
+          echo "Downloaded files:"
+          ls -R release
+          zip="$(find release -type f -name '*.zip' | head -n1)"
+          if [ -z "$zip" ]; then
+            echo "::error::No .zip found under release/ — nothing to publish."
+            exit 1
+          fi
+          echo "Publishing: $zip"
+          echo "zip_path=$zip" >> "$GITHUB_OUTPUT"
       - name: Publish signed GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -413,7 +426,7 @@ jobs:
           name: bk_client v${{ needs.get_version.outputs.version }}
           draft: false
           fail_on_unmatched_files: true
-          files: bk_client.zip
+          files: ${{ steps.findzip.outputs.zip_path }}
 
 # MARK: TESTS
   make_blenderkit_tests_matrix:
