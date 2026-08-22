@@ -407,18 +407,18 @@ jobs:
         with:
           name: bk_client.zip
           path: release
-      - name: Locate release ZIP
-        id: findzip
+      - name: Repackage release ZIP
+        # The artifact is uploaded with archive:false, so download-artifact
+        # extracts the zip envelope and we get its loose contents back. Re-zip
+        # them (restoring exec bits stripped during extraction) to recreate the
+        # bk_client.zip asset for the release.
         run: |
           echo "Downloaded files:"
           ls -R release
-          zip="$(find release -type f -name '*.zip' | head -n1)"
-          if [ -z "$zip" ]; then
-            echo "::error::No .zip found under release/ — nothing to publish."
-            exit 1
-          fi
-          echo "Publishing: $zip"
-          echo "zip_path=$zip" >> "$GITHUB_OUTPUT"
+          chmod 755 release/bk_client-linux-* release/bk_client-macos-* 2>/dev/null || true
+          ( cd release && zip -r -X ../bk_client.zip . )
+          echo "Repackaged bk_client.zip:"
+          unzip -l bk_client.zip
       - name: Publish signed GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -426,7 +426,7 @@ jobs:
           name: bk_client v${{ needs.get_version.outputs.version }}
           draft: false
           fail_on_unmatched_files: true
-          files: ${{ steps.findzip.outputs.zip_path }}
+          files: bk_client.zip
 
 # MARK: TESTS
   make_blenderkit_tests_matrix:
