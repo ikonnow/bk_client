@@ -424,7 +424,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: blenderkit/blenderkit
-          path: ${{ inputs.blender_tests_branch }}
+          ref: ${{ inputs.blender_tests_branch }}
       - id: set-matrix
         run: python .github/make-tests-matrix.py >> $GITHUB_OUTPUT
 
@@ -438,7 +438,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: blenderkit/blenderkit
-          path: ${{ inputs.blender_tests_branch }}
+          ref: ${{ inputs.blender_tests_branch }}
       - uses: actions/download-artifact@v8
         with:
           name: bk_client-linux-x86_64
@@ -501,7 +501,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: blenderkit/blenderkit
-          path: ${{ inputs.blender_tests_branch }}
+          ref: ${{ inputs.blender_tests_branch }}
       - uses: actions/download-artifact@v8
         with:
           name: bk_client-linux-x86_64
@@ -562,7 +562,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: blenderkit/blenderkit
-          path: ${{ inputs.blender_tests_branch }}
+          ref: ${{ inputs.blender_tests_branch }}
       - uses: actions/download-artifact@v8
         with:
           name: bk_client-linux-x86_64
