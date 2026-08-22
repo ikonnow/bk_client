@@ -1,6 +1,11 @@
 {
     "files.insertFinalNewline": true,
 
+    // User settings default files.autoSave to "afterDelay", and VS Code does
+    // NOT run format-on-save / code-actions-on-save for afterDelay auto-saves.
+    // Override to "onFocusChange" here so Ruff actually formats on save.
+    "files.autoSave": "onFocusChange",
+
     "[go]": {
         "editor.defaultFormatter": "golang.go",
         "editor.formatOnSave": true
@@ -18,13 +23,17 @@
     "python.analysis.autoFormatStrings": true,
 
     "ruff.enable": true,
-    
+
     "[python]": {
         "editor.defaultFormatter": "charliermarsh.ruff",
         "editor.formatOnSave": true,
         "editor.formatOnPaste": true,
         "editor.formatOnType": true,
-        "editor.renderFinalNewline": "on"
+        "editor.renderFinalNewline": "on",
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+        }
     },
 
     "cSpell.words": [
@@ -34,6 +43,7 @@
         "blendkit",
         "gofmt",
         "ldflags",
+        "nodegraph",
         "pydoclint",
         "uvx"
     ],

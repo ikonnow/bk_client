@@ -14,10 +14,16 @@ Recipe ABI:
         max_resolution : str  (optional) - "512"/"1024"/"2048"/"4096"/"8192"/"ORIGINAL"
                                           used to pick the textures subfolder
                                           suffix (mirrors Blendkit addon)
+        export_mtlx    : bool (optional, default True) - also emit standalone
+                                          .mtlx materials into ``materials/`` and
+                                          reference them from the .usd
+                                          (via the vendored bk_mtlx exporter;
+                                          skipped if MaterialX is unavailable)
 
 Stdout protocol (consumed by bk_maya.core.blender_runner)::
     BK_STATUS   <stage>
     BK_PROGRESS <0..1> <msg>
+    BK_ARTIFACT <path>   (side outputs, e.g. the geometry crate)
     BK_DONE     <path>
     BK_ERROR    <msg>
 """
@@ -27,8 +33,10 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import sys
 import traceback
+import xml.etree.ElementTree as ET
 
 import bpy  # type: ignore[import-not-found]
 
@@ -68,6 +76,18 @@ def done(path: str) -> None:
         path: A string representing the path of the completed export.
     """
     _emit("BK_DONE", path)
+
+
+def artifact(path: str) -> None:
+    """Emit a side-artifact path (e.g. the geometry crate).
+
+    Distinct from BK_DONE (which marks the single primary output) so the
+    consumer can pick up extra files without mistaking them for completion.
+
+    Args:
+        path: A string path to a produced side artifact.
+    """
+    _emit("BK_ARTIFACT", path)
 
 
 def error(msg: str) -> None:
@@ -846,6 +866,272 @@ def _sanitize_meshes_for_usd_export() -> None:
 
 
 # ---------------------------------------------------------------------------
+# MaterialX sidecar export (vendored bl_mtlx exporter)
+# ---------------------------------------------------------------------------
+# Blender's native wm.usd_export MaterialX network only covers the subset of
+# nodes it can map to a UsdPreviewSurface-equivalent graph. The vendored
+# bl_mtlx exporter emits a far richer standalone .mtlx per material (image /
+# math / mix / ramp / noise / voronoi / displacement / ...). We export those
+# next to the .usd and reference each one onto its material prim so the
+# consumer (Maya mayaUsd / MaterialX) binds the high-fidelity materials onto
+# the same geometry.
+#
+# The compiled ``MaterialX`` (PyMaterialX) package is NOT bundled — it ships
+# with Blender 4.1+. If it is missing we skip this step and still emit the USD.
+
+
+def _safe_filename(name: str) -> str:
+    """Return *name* reduced to a filesystem/USD-safe token (ascii, no spaces)."""
+    out = [ch if (ch.isalnum() or ch in ("_", "-")) else "_" for ch in name]
+    return "".join(out).strip("_") or "Unnamed"
+
+
+def _load_mtlx_exporter():
+    """Import the vendored bl_mtlx exporter under its unique package name.
+
+    Returns the ``export_material_to_materialx`` callable, or ``None`` if the
+    package (or its compiled ``MaterialX`` dependency) is unavailable. Loaded
+    as ``bk_mtlx`` so it never clashes with the ``material_x`` add-on when that
+    is also enabled in Blender.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    try:
+        from bk_mtlx.blender_materialx_exporter import export_material_to_materialx
+    except ImportError as exc:
+        log(f"mtlx: exporter/MaterialX unavailable ({exc}); skipping .mtlx export")
+        return None
+    return export_material_to_materialx
+
+
+def _fix_mtlx_normal_maps(mtlx_path: str) -> int:
+    """Repair mistranslated normal-map connections in a generated .mtlx.
+
+    bk_mtlx can wire a ``color3`` normal-map ``<image>`` straight into the
+    ``vector3`` ``normal`` input of a ``<bump>`` node, which Maya rejects with
+    "Mismatched types in port connection". Rewrite that pattern into the
+    canonical tangent-space flow: a ``vector3`` (raw) image feeding a
+    ``<normalmap>`` node. Returns the number of connections fixed.
+    """
+    try:
+        # Parsing our own generated, trusted .mtlx (not untrusted input).
+        tree = ET.parse(mtlx_path)  # noqa: S314  # nosec B314
+    except (ET.ParseError, OSError) as exc:
+        log(f"mtlx-fix: could not parse {os.path.basename(mtlx_path)} ({exc})")
+        return 0
+
+    root = tree.getroot()
+    fixed = 0
+    for graph in root.iter("nodegraph"):
+        by_name = {n.get("name"): n for n in graph if n.get("name")}
+        for node in list(graph):
+            if node.tag != "bump":
+                continue
+            nrm = node.find("input[@name='normal']")
+            if nrm is None:
+                continue
+            src = by_name.get(nrm.get("nodename"))
+            if src is None or src.tag != "image" or src.get("type") == "vector3":
+                continue
+            # The normal map was read as color3 and bumped — convert to a
+            # raw vector3 image feeding a normalmap node.
+            src.set("type", "vector3")
+            if src.get("nodedef"):
+                src.set("nodedef", "ND_image_vector3")
+            src.set("colorspace", "raw")
+            node.tag = "normalmap"
+            if node.get("nodedef"):
+                node.set("nodedef", "ND_normalmap")
+            nrm.set("name", "in")
+            fixed += 1
+
+    if fixed:
+        # ET.indent is 3.9+, headless Blender is newer — but be safe
+        with contextlib.suppress(AttributeError):
+            ET.indent(tree, space="  ")
+        tree.write(mtlx_path, encoding="unicode", xml_declaration=True)
+        log(f"mtlx-fix: repaired {fixed} normal-map connection(s) in {os.path.basename(mtlx_path)}")
+    return fixed
+
+
+def export_materialx_sidecar(out_usd: str) -> dict:
+    """Export one ``.mtlx`` per used material next to *out_usd*.
+
+    Layout (all relative to the .usd directory)::
+        materials/<Material>.mtlx
+        textures/<image files>       (shared with the .usd, see options below)
+
+    Returns an in-memory mapping (Blender material name -> .mtlx path + status)
+    that the caller uses to author the MaterialX reference layer.
+    """
+    out_dir = os.path.dirname(os.path.abspath(out_usd)) or "."
+    mtlx_dirname = "materials"
+    mtlx_dir = os.path.join(out_dir, mtlx_dirname)
+
+    mapping: dict = {
+        "usd": os.path.basename(out_usd),
+        "generated_by": "export_usd.py",
+        "materialx_available": False,
+        "mtlx_dir": mtlx_dirname,
+        "materials": [],
+    }
+
+    exporter = _load_mtlx_exporter()
+    if exporter is None:
+        return mapping
+
+    mapping["materialx_available"] = True
+
+    # A quiet logger — the exporter is extremely chatty at INFO level.
+    import logging
+
+    mtlx_logger = logging.getLogger("bk_mtlx_export")
+    mtlx_logger.setLevel(logging.WARNING)
+    if not mtlx_logger.handlers:
+        h = logging.StreamHandler(stream=sys.stdout)
+        h.setFormatter(logging.Formatter("[bk_mtlx] %(message)s"))
+        mtlx_logger.addHandler(h)
+
+    os.makedirs(mtlx_dir, exist_ok=True)
+
+    options = {
+        "export_textures": True,
+        # Reuse the shared textures/ folder next to the .usd (populated by
+        # unpack_textures) instead of copying a second set into materials/textures/.
+        # The .mtlx materials reference ../textures/<file>, the same files the
+        # UsdPreviewSurface network points at, so both networks stay in sync.
+        "copy_textures": False,
+        "texture_folder_name": "../textures",
+        "materialx_version": "1.39",
+        "active_uvmap": "UVMap",
+        "strict_mode": False,  # one bad material must not abort the batch
+        "optimize_document": True,
+        "advanced_validation": False,
+        "performance_monitoring": False,
+    }
+
+    materials = [m for m in bpy.data.materials if m.users > 0 and m.use_nodes]
+    total = len(materials)
+    log(f"mtlx: exporting {total} material(s) -> {mtlx_dir}")
+    exported = 0
+    for i, mat in enumerate(materials):
+        fname = f"{_safe_filename(mat.name)}.mtlx"
+        out_path = os.path.join(mtlx_dir, fname)
+        entry: dict = {
+            "name": mat.name,
+            "mtlx_file": f"{mtlx_dirname}/{fname}",
+            "success": False,
+        }
+        try:
+            result = exporter(mat, out_path, mtlx_logger, options)
+            entry["success"] = bool(result.get("success"))
+            unsupported = result.get("unsupported_nodes") or []
+            if unsupported:
+                entry["unsupported_nodes"] = unsupported
+            if result.get("error"):
+                entry["error"] = str(result["error"])
+            if entry["success"]:
+                exported += 1
+                _fix_mtlx_normal_maps(out_path)
+        except Exception as exc:  # never let one material abort the recipe
+            entry["error"] = str(exc)
+            log(f"mtlx: FAILED for {mat.name!r}: {exc}")
+        mapping["materials"].append(entry)
+        if total:
+            progress(0.62 + 0.06 * (i + 1) / total, f"mtlx {i + 1}/{total}")
+
+    log(f"mtlx: exported {exported}/{total} material(s) -> {mtlx_dir}")
+    return mapping
+
+
+# ---------------------------------------------------------------------------
+# MaterialX reference layer (wire the sidecar .mtlx into the USD)
+# ---------------------------------------------------------------------------
+# Blender's wm.usd_export can only emit its OWN inline MaterialX network. To
+# make the USD use *our* richer bk_mtlx materials instead, we export geometry
+# to a crate and author a thin ascii .usda that sublayers it and references
+# each sidecar .mtlx onto its material prim under /root/_materials.
+
+_VALID_USD_NAME = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+_SURFACEMATERIAL_RE = re.compile(r'<surfacematerial\s+name="([^"]+)"')
+
+
+def _usd_safe_name(name: str) -> str:
+    """Replicate Blender's USD prim-name sanitisation for a material.
+
+    Any character outside ``[A-Za-z0-9_]`` becomes ``_`` and a leading digit
+    is replaced with ``_`` — matching how Blender names each material prim
+    under ``/root/_materials`` (e.g. ``steam.003`` -> ``steam_003``).
+    """
+    out = [ch if (ch in _VALID_USD_NAME and not (i == 0 and ch.isdigit())) else "_" for i, ch in enumerate(name)]
+    return "".join(out) or "_"
+
+
+def _read_mtlx_material_name(mtlx_path: str) -> str | None:
+    """Return the ``<surfacematerial name=...>`` inside a .mtlx.
+
+    usdMtlx exposes it at ``/MaterialX/Materials/<name>``; the name is often
+    mangled by the exporter (e.g. ``steam_4``) so it must be read, not guessed.
+    """
+    try:
+        with open(mtlx_path, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return None
+    m = _SURFACEMATERIAL_RE.search(text)
+    return m.group(1) if m else None
+
+
+def write_mtlx_reference_layer(layer_path: str, geom_rel: str, mapping: dict) -> int:
+    """Author *layer_path* as a text .usda composing the geometry crate + sidecar mtlx.
+
+    The layer sublayers *geom_rel* (the exported <stem>.usd crate) and, for each
+    material, overlays ``over /root/_materials/<Mat>`` with a reference to its
+    ``materials/<Mat>.mtlx`` at ``</MaterialX/Materials/<surfacematerial>>``.
+
+    Returns the number of materials wired.
+    """
+    out_dir = os.path.dirname(os.path.abspath(layer_path)) or "."
+    body: list[str] = []
+    wired = 0
+    for entry in mapping.get("materials", []):
+        if not entry.get("success"):
+            continue
+        mtlx_rel = entry.get("mtlx_file")  # e.g. "materials/steam_003.mtlx"
+        if not mtlx_rel:
+            continue
+        surf = _read_mtlx_material_name(os.path.join(out_dir, mtlx_rel))
+        if not surf:
+            log(f"mtlx-ref: no <surfacematerial> in {mtlx_rel}; skipping")
+            continue
+        prim = _usd_safe_name(entry.get("name", ""))
+        body.append(f'        over "{prim}" (')
+        body.append(f"            prepend references = @./{mtlx_rel}@</MaterialX/Materials/{surf}>")
+        body.append("        )")
+        body.append("        {")
+        body.append("        }")
+        wired += 1
+        log(f"mtlx-ref: {prim} -> {mtlx_rel} </MaterialX/Materials/{surf}>")
+
+    lines = [
+        "#usda 1.0",
+        "(",
+        '    defaultPrim = "root"',
+        "    subLayers = [",
+        f"        @{geom_rel}@",
+        "    ]",
+        ")",
+        "",
+    ]
+    if body:
+        lines += ['over "root"', "{", '    over "_materials"', "    {", *body, "    }", "}", ""]
+    with open(layer_path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
+    return wired
+
+
+# ---------------------------------------------------------------------------
 # Main export
 # ---------------------------------------------------------------------------
 
@@ -923,9 +1209,68 @@ def _prepare_material_asset(asset_name: str = "", asset_id: str = "") -> bool:
     return True
 
 
+def _flatten_rig_to_single_root(group_name: str = "") -> int:
+    """Drop a dangling armature rig and gather parts under one model root.
+
+    BlenderKit "rigged" props (e.g. the daewoo truck) rig their parts by rigid
+    bone-parenting, not skin weights: Blender exports an unbound Skeleton +
+    SkelAnimation (no SkelRoot, 0 skinned meshes) plus each part as its own
+    posed Xform. Unreal/Maya then import that as hundreds of loose pieces.
+
+    Each part is already at its correct world position, so we detach the parts
+    from the armature (preserving world transforms), delete the orphan
+    skeleton, and reparent every top-level object under a single empty. The USD
+    then has /root/<Model>/<parts> — one asset, parts still individually
+    movable, positions 1:1. No-op when there is no armature.
+
+    Returns the number of armature objects removed.
+    """
+    armatures = [o for o in bpy.data.objects if o.type == "ARMATURE"]
+    if not armatures:
+        return 0
+
+    objs = [o for o in bpy.context.scene.objects if o.type != "ARMATURE"]
+    worlds = {o.name: o.matrix_world.copy() for o in objs}
+
+    # Detach parts parented to the rig (object- or bone-parented) in place.
+    for o in objs:
+        if o.parent in armatures:
+            o.parent = None
+            o.matrix_world = worlds[o.name]
+
+    removed = 0
+    for arm in armatures:
+        with contextlib.suppress(Exception):
+            bpy.data.objects.remove(arm, do_unlink=True)
+            removed += 1
+
+    name = group_name or os.path.splitext(os.path.basename(bpy.data.filepath))[0] or "Model"
+    group = bpy.data.objects.new(name, None)
+    bpy.context.scene.collection.objects.link(group)
+    grouped = 0
+    for o in list(bpy.context.scene.objects):
+        if o is group or o.parent is not None:
+            continue
+        world = o.matrix_world.copy()
+        o.parent = group
+        o.matrix_parent_inverse = group.matrix_world.inverted()
+        o.matrix_world = world
+        grouped += 1
+
+    log(f"rig-flatten: removed {removed} armature(s), grouped {grouped} root object(s) under {name!r}")
+    return removed
+
+
 def export_to_usd(
-    blend_path: str, out_usd: str, asset_type: str = "model", asset_name: str = "", asset_id: str = ""
-) -> None:
+    blend_path: str,
+    out_usd: str,
+    asset_type: str = "model",
+    asset_name: str = "",
+    asset_id: str = "",
+    *,
+    export_mtlx: bool = True,
+    mtlx_references: bool = True,
+) -> str:
     """Export a .blend to .usd with the necessary pre-processing for Maya compatibility.
 
     Args:
@@ -934,6 +1279,14 @@ def export_to_usd(
       asset_type: Blendkit asset type ("material" gets a preview-mesh step)
       asset_name: asset display name (used to locate the asset material)
       asset_id: Blendkit asset id (used to locate the asset material)
+      export_mtlx: also emit standalone .mtlx materials referenced by the .usd
+      mtlx_references: when the sidecar .mtlx exist, make the USD reference them
+        (geometry goes to the <stem>.usd crate + a thin <stem>.usda composes it)
+        instead of Blender's inline MaterialX network
+
+    Returns:
+      The path Maya should load: the <stem>.usda wrapper when MaterialX
+      references were written, otherwise the plain out_usd crate.
     """
     status("Opening blend")
     bpy.ops.wm.open_mainfile(filepath=blend_path)
@@ -953,6 +1306,9 @@ def export_to_usd(
         obj.hide_render = False
         obj.hide_viewport = False
 
+    status("Consolidating rig")
+    _flatten_rig_to_single_root(asset_name)
+
     status("Unpacking textures")
     unpack_textures(blend_path)
     progress(0.30, "Unpacked textures")
@@ -965,18 +1321,24 @@ def export_to_usd(
     _rename_shader_nodes_to_material()
     progress(0.48, "Renamed shader nodes")
 
-    # Save the relocated paths so wm.usd_export resolves them off disk
-    # (no longer reads from packed bytes).
-    try:
-        bpy.ops.wm.save_as_mainfile(filepath=blend_path, compress=False)
-        # Clean up Blender's automatic backup.
-        with contextlib.suppress(Exception):
-            os.remove(blend_path + "1")
-    except Exception as exc:
-        log(f"save_as_mainfile failed (non-fatal): {exc}")
+    # Emit standalone MaterialX materials while the material graphs are still
+    # intact (the destructive split/force-single passes below drop material
+    # slots). Skipped gracefully if MaterialX is unavailable.
+    mtlx_mapping: dict | None = None
+    if export_mtlx:
+        status("Exporting MaterialX")
+        try:
+            mtlx_mapping = export_materialx_sidecar(out_usd)
+        except Exception as exc:  # never let mtlx failure abort the USD export
+            log(f"mtlx: sidecar export failed (non-fatal): {exc}")
+        progress(0.60, "MaterialX exported")
 
-    # IMPORTANT: do the destructive single-material split AFTER saving the
-    # .blend, so the cached file remains intact for future re-exports.
+    # NOTE: intentionally do NOT re-save the .blend here. unpack_textures()
+    # already wrote the images to disk and repointed the in-memory image
+    # datablocks, so wm.usd_export (same session) resolves them without a save.
+    # Overwriting the original download would re-encode it with this (newer)
+    # Blender and break re-imports in older Blender versions of the addon.
+
     status("Splitting multi-material meshes")
     _split_meshes_by_material()
     progress(0.55, "Split materials")
@@ -1001,7 +1363,20 @@ def export_to_usd(
     out_dir = os.path.dirname(out_usd) or "."
     os.makedirs(out_dir, exist_ok=True)
 
+    # Wire our sidecar .mtlx as the MaterialX source when they exist. Geometry
+    # goes to the <stem>.usd crate and Blender's inline MaterialX network is
+    # dropped (a referenced material can't override an inline one); a thin
+    # <stem>.usda composes the crate + references our .mtlx and becomes the
+    # file Maya loads. Otherwise export straight to out_usd with inline mtlx.
+    use_refs = bool(
+        mtlx_references and mtlx_mapping and any(e.get("success") for e in mtlx_mapping.get("materials", []))
+    )
+    geom_rel = f"./{os.path.basename(out_usd)}"
+    wrapper_usda = os.path.splitext(out_usd)[0] + ".usda"
+
     desired = {
+        # Geometry (and, when not referencing our sidecars, inline MaterialX)
+        # always lands in the <stem>.usd crate.
         "filepath": out_usd,
         "selected_objects_only": False,
         "visible_objects_only": True,
@@ -1017,10 +1392,9 @@ def export_to_usd(
         "overwrite_textures": False,
         "relative_paths": True,
         "generate_preview_surface": True,
-        # Emit MaterialX network alongside UsdPreviewSurface. Maya's mayaUsd
-        # reads MaterialX with higher PBR fidelity (roughness / metallic /
-        # normal). Both networks coexist in the .usd.
-        "generate_materialx_network": True,
+        # Inline MaterialX only when we are NOT referencing our own sidecar
+        # .mtlx; UsdPreviewSurface stays as the universal-context fallback.
+        "generate_materialx_network": not use_refs,
         "root_prim_path": "/root",
         "default_prim_path": "/root",
         "export_global_forward_selection": "Y",
@@ -1042,7 +1416,18 @@ def export_to_usd(
     log(f"usd_export: texture-related kwargs accepted = {tex_flags}")
 
     bpy.ops.wm.usd_export(**accepted)
+    progress(0.90, "exported usd")
+
+    primary = out_usd
+    if use_refs:
+        status("Linking MaterialX materials")
+        wired = write_mtlx_reference_layer(wrapper_usda, geom_rel, mtlx_mapping)
+        log(f"mtlx-ref: wired {wired} material(s) into {os.path.basename(wrapper_usda)}")
+        # The .usd crate is now a sub-layer of the .usda wrapper Maya loads.
+        artifact(out_usd)
+        primary = wrapper_usda
     progress(0.99, "exported usd")
+    return primary
 
 
 # ---------------------------------------------------------------------------
@@ -1085,12 +1470,14 @@ def main() -> int:
         return 1
 
     try:
-        export_to_usd(
+        primary = export_to_usd(
             blend_path,
             out_usd,
             asset_type=str(params.get("asset_type") or "model"),
             asset_name=str(params.get("asset_name") or ""),
             asset_id=str(params.get("asset_id") or ""),
+            export_mtlx=bool(params.get("export_mtlx", True)),
+            mtlx_references=bool(params.get("mtlx_references", True)),
         )
     except Exception as exc:
         error(f"export failed: {exc}")
@@ -1098,7 +1485,7 @@ def main() -> int:
         return 1
 
     progress(1.0, "done")
-    done(out_usd)
+    done(primary or out_usd)
     return 0
 
 
