@@ -406,6 +406,9 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: bk_client.zip
+          path: release
+      - name: Display downloaded files
+        run: ls -R release
       - name: Publish signed GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -413,7 +416,7 @@ jobs:
           name: bk_client v${{ needs.get_version.outputs.version }}
           draft: false
           fail_on_unmatched_files: true
-          files: bk_client.zip
+          files: release/bk_client.zip
 
 # MARK: TESTS
   make_blenderkit_tests_matrix:
