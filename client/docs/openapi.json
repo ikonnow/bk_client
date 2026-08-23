@@ -5,7 +5,7 @@
       "name": "GPL-2.0-or-later"
     },
     "title": "Blendkit-Client API",
-    "version": "1.12.8"
+    "version": "1.12.9"
   },
   "openapi": "3.1.0",
   "paths": {

@@ -361,6 +361,15 @@ def _write_release_zip(zip_path: str, root: str, out_dir: str, binaries: list[di
         # Bundled recipes + their manifests (skip caches/helpers).
         _add_dir_to_zip(zf, TOOLS_DIR, f"{prefix}tools", _keep_tool)
 
+        # Vendored MaterialX package: full subtree so the loose tools/ matches
+        # the `all:tools/bk_mtlx` embed (keeps package __init__.py files).
+        _add_tree_to_zip(
+            zf,
+            os.path.join(TOOLS_DIR, "bk_mtlx"),
+            f"{prefix}tools/bk_mtlx",
+            lambda name: name.endswith((".py", ".json")),
+        )
+
         # Generated API docs.
         for doc in ("API.md", "openapi.json"):
             doc_path = os.path.join(DOCS_DIR, doc)
@@ -398,6 +407,36 @@ def _add_dir_to_zip(
         path = os.path.join(src_dir, name)
         if os.path.isfile(path):
             zf.write(path, f"{arc_dir}/{name}")
+
+
+def _add_tree_to_zip(
+    zf: zipfile.ZipFile,
+    src_dir: str,
+    arc_dir: str,
+    keep: Callable[[str], bool] | None = None,
+) -> None:
+    """Recursively add *src_dir* to *zf* under *arc_dir*, preserving structure.
+
+    Unlike :func:`_add_dir_to_zip`, this walks subdirectories and keeps files
+    whose names begin with ``_`` (e.g. package ``__init__.py``), skipping only
+    ``__pycache__``.
+
+    Args:
+        zf: The open zip archive to write into.
+        src_dir: Source directory whose tree is added (recursive).
+        arc_dir: Destination path prefix inside the archive.
+        keep: Optional predicate ``(name) -> bool`` selecting which filenames to include.
+    """
+    if not os.path.isdir(src_dir):
+        return
+    for dirpath, dirnames, filenames in os.walk(src_dir):
+        dirnames[:] = sorted(d for d in dirnames if d != "__pycache__")
+        rel = os.path.relpath(dirpath, src_dir)
+        arc_sub = arc_dir if rel == "." else f"{arc_dir}/{rel.replace(os.sep, '/')}"
+        for name in sorted(filenames):
+            if keep is not None and not keep(name):
+                continue
+            zf.write(os.path.join(dirpath, name), f"{arc_sub}/{name}")
 
 
 def run(args: argparse.Namespace) -> None:
