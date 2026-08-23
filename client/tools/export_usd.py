@@ -1114,10 +1114,16 @@ def write_mtlx_reference_layer(layer_path: str, geom_rel: str, mapping: dict) ->
         wired += 1
         log(f"mtlx-ref: {prim} -> {mtlx_rel} </MaterialX/Materials/{surf}>")
 
+    # Stage metadata (upAxis/metersPerUnit) is read only from the ROOT layer and
+    # is NOT inherited from sublayers, so replicate the crate's Blender export
+    # convention (Z-up, metres) here — otherwise consumers fall back to USD
+    # defaults (Y-up, cm) and the asset loads rotated + 100x too small.
     lines = [
         "#usda 1.0",
         "(",
         '    defaultPrim = "root"',
+        "    metersPerUnit = 1",
+        '    upAxis = "Z"',
         "    subLayers = [",
         f"        @{geom_rel}@",
         "    ]",
