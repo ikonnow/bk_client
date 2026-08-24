@@ -406,6 +406,19 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: bk_client.zip
+          path: release
+      - name: Repackage release ZIP
+        # The artifact is uploaded with archive:false, so download-artifact
+        # extracts the zip envelope and we get its loose contents back. Re-zip
+        # them (restoring exec bits stripped during extraction) to recreate the
+        # bk_client.zip asset for the release.
+        run: |
+          echo "Downloaded files:"
+          ls -R release
+          chmod 755 release/bk_client-linux-* release/bk_client-macos-* 2>/dev/null || true
+          ( cd release && zip -r -X ../bk_client.zip . )
+          echo "Repackaged bk_client.zip:"
+          unzip -l bk_client.zip
       - name: Publish signed GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -424,7 +437,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: blenderkit/blenderkit
-          path: ${{ inputs.blender_tests_branch }}
+          ref: ${{ inputs.blender_tests_branch }}
       - id: set-matrix
         run: python .github/make-tests-matrix.py >> $GITHUB_OUTPUT
 
@@ -438,22 +451,25 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: blenderkit/blenderkit
-          path: ${{ inputs.blender_tests_branch }}
+          ref: ${{ inputs.blender_tests_branch }}
       - uses: actions/download-artifact@v8
         with:
           name: bk_client-linux-x86_64
           path: prebuilt
-      
+
       - run: echo $VERSION > prebuilt/VERSION
         env:
           VERSION: ${{ needs.get_version.outputs.version }}
       - run: ls prebuilt
       - run: cat prebuilt/VERSION
-      
+
       - run: echo $GIT_DISCOVERY_ACROSS_FILESYSTEM
       - run: pwd
       - name: Checkout bk_proxor submodule
         run: git submodule update --init bk_proxor
+
+      - name: Make prebuilt client executable
+        run: chmod +x prebuilt/bk_client-linux-x86_64
 
       - name: Single binary build
         run: python dev.py build --client-build prebuilt
@@ -480,7 +496,7 @@ jobs:
       - name: TEST
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python dev.py test --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons 
+        run: python dev.py test --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons
 
 
   blenderkit_TESTS_debian_x86_64:
@@ -494,24 +510,27 @@ jobs:
       - run: apt update
       - run: apt install -y python3 curl xz-utils git libxrender1 libxxf86vm1 libxi6 libxfixes3 libxkbcommon0 libsm6 libgl1
       - run: git config --global --add safe.directory $PWD
-      
+
       - uses: actions/checkout@v7
         with:
           repository: blenderkit/blenderkit
-          path: ${{ inputs.blender_tests_branch }}
+          ref: ${{ inputs.blender_tests_branch }}
       - uses: actions/download-artifact@v8
         with:
           name: bk_client-linux-x86_64
           path: prebuilt
-      
+
       - run: echo $VERSION > prebuilt/VERSION
         env:
           VERSION: ${{ needs.get_version.outputs.version }}
       - run: ls prebuilt
       - run: cat prebuilt/VERSION
-      
+
       - name: Checkout bk_proxor submodule
         run: git submodule update --init bk_proxor
+
+      - name: Make prebuilt client executable
+        run: chmod +x prebuilt/bk_client-linux-x86_64
 
       - name: Single binary build
         run: python3 dev.py build --client-build prebuilt
@@ -556,20 +575,23 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: blenderkit/blenderkit
-          path: ${{ inputs.blender_tests_branch }}
+          ref: ${{ inputs.blender_tests_branch }}
       - uses: actions/download-artifact@v8
         with:
           name: bk_client-linux-x86_64
           path: prebuilt
-      
+
       - run: echo $VERSION > prebuilt/VERSION
         env:
           VERSION: ${{ needs.get_version.outputs.version }}
       - run: ls prebuilt
       - run: cat prebuilt/VERSION
-      
+
       - name: Checkout bk_proxor submodule
         run: git submodule update --init bk_proxor
+
+      - name: Make prebuilt client executable
+        run: chmod +x prebuilt/bk_client-linux-x86_64
 
       - name: Single binary build
         run: python dev.py build --client-build prebuilt
@@ -591,7 +613,7 @@ jobs:
       - name: Extract Blender
         if: steps.blenderBinaryCache.outputs.cache-hit != 'true'
         run: tar -xf $HOME/blender.tar.xz -C $HOME/blender --strip-components=1
-      
+
       - run: echo $PATH
       - name: Add Blender to PATH
         run: ln -s $HOME/blender/blender /usr/local/bin/blender
@@ -599,4 +621,4 @@ jobs:
       - name: TEST
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python dev.py test --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons 
+        run: python dev.py test --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons

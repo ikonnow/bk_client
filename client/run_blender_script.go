@@ -61,7 +61,13 @@ import (
 // glob must match at least one file at build time (export_glb.json,
 // export_usd.json satisfy that).
 //
-//go:embed tools/*.py tools/*.json
+// The `all:tools/bk_mtlx` pattern embeds the vendored MaterialX exporter
+// package (a multi-file Python subtree). The `all:` prefix is required so
+// go:embed keeps the package's `__init__.py` files (names beginning with
+// `_` are excluded by the default directory embed rules). extractEmbeddedScript
+// mirrors this subtree next to the extracted recipe so `import bk_mtlx` works.
+//
+//go:embed tools/*.py tools/*.json all:tools/bk_mtlx
 var bundledTools embed.FS
 
 // RunBlenderScriptData is the JSON body of POST /run_blender_script.
@@ -212,7 +218,50 @@ func extractEmbeddedScript(id string) (string, error) {
 	if err := os.WriteFile(cachePath, data, 0o644); err != nil {
 		return "", fmt.Errorf("writing extracted script: %w", err)
 	}
+	// Some recipes import the vendored Python packages embedded under
+	// tools/ (e.g. export_usd imports bk_mtlx for MaterialX export). Mirror
+	// any such package subtree next to the extracted recipe so the import
+	// resolves. Best-effort: a mirror failure must not block recipes that
+	// don't need the package.
+	if err := extractEmbeddedTree("tools/bk_mtlx", cacheDir); err != nil {
+		BKLog.Printf("%s run_blender_script: mirroring bk_mtlx failed (non-fatal): %v", EmoWarning, err)
+	}
 	return cachePath, nil
+}
+
+// extractEmbeddedTree mirrors an embedded directory subtree (rooted at
+// embedRoot, e.g. "tools/bk_mtlx") into destToolsDir, preserving the
+// directory's own name. It overwrites existing files unconditionally so an
+// upgraded client always ships current bytes. Returns nil if the subtree is
+// not embedded (nothing to mirror).
+func extractEmbeddedTree(embedRoot, destToolsDir string) error {
+	entries, err := bundledTools.ReadDir(embedRoot)
+	if err != nil {
+		// Not embedded (or empty) — nothing to do.
+		return nil
+	}
+	// Recreate the leaf directory name (bk_mtlx) under destToolsDir.
+	destRoot := filepath.Join(destToolsDir, filepath.Base(embedRoot))
+	if err := os.MkdirAll(destRoot, 0o755); err != nil {
+		return fmt.Errorf("creating %s: %w", destRoot, err)
+	}
+	for _, e := range entries {
+		childEmbed := embedRoot + "/" + e.Name()
+		if e.IsDir() {
+			if err := extractEmbeddedTree(childEmbed, destRoot); err != nil {
+				return err
+			}
+			continue
+		}
+		b, err := bundledTools.ReadFile(childEmbed)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", childEmbed, err)
+		}
+		if err := os.WriteFile(filepath.Join(destRoot, e.Name()), b, 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", e.Name(), err)
+		}
+	}
+	return nil
 }
 
 func doRunBlenderScript(data RunBlenderScriptData, taskID string) {
