@@ -18,6 +18,10 @@ on:
         type: string
         default: "main"
 
+concurrency: # cancel all previous still running jobs on this PR or commit 
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   get_version:
     runs-on: ubuntu-latest
