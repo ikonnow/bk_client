@@ -97,6 +97,9 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 | POST | `/ratings/get_bookmarks` | ✓ | 🔑 | Get bookmarks | `MinimalTaskData` |
 | POST | `/ratings/get_rating` | ✓ | 🔑 | Get asset rating | `GetRatingData` |
 | POST | `/ratings/send_rating` | ✓ | 🔑 | Send asset rating | `SendRatingData` |
+| POST | `/ratings/get_not_used_reasons` | ✓ | 🔑 | Get not-used reasons | `MinimalTaskData` |
+| POST | `/ratings/get_didnt_use` | ✓ | 🔑 | Get didn't-use flag | `GetDidntUseData` |
+| POST | `/ratings/send_didnt_use` | ✓ | 🔑 | Set or clear didn't-use flag | `SendDidntUseData` |
 
 ### wrappers
 
@@ -442,6 +445,33 @@ Submits a rating for an asset. Only POST is accepted.
 - **Handler:** `SendRatingHandler`
 - **Versioned alias:** `/vX.Y/ratings/send_rating`
 - **Request body:** JSON `SendRatingData` (Go struct in package main)
+- **Auth:** requires a logged-in Blendkit API key
+
+#### `POST /ratings/get_not_used_reasons`
+
+Fetches the shared choice set for the "didn't use it" feedback.
+
+- **Handler:** `GetNotUsedReasonsHandler`
+- **Versioned alias:** `/vX.Y/ratings/get_not_used_reasons`
+- **Request body:** JSON `MinimalTaskData` (Go struct in package main)
+- **Auth:** requires a logged-in Blendkit API key
+
+#### `POST /ratings/get_didnt_use`
+
+Fetches the user's "I didn't use this asset" flag for an asset.
+
+- **Handler:** `GetDidntUseHandler`
+- **Versioned alias:** `/vX.Y/ratings/get_didnt_use`
+- **Request body:** JSON `GetDidntUseData` (Go struct in package main)
+- **Auth:** requires a logged-in Blendkit API key
+
+#### `POST /ratings/send_didnt_use`
+
+Sets (with an optional reason) or clears the user's "I didn't use this asset" flag. Only POST is accepted.
+
+- **Handler:** `SendDidntUseHandler`
+- **Versioned alias:** `/vX.Y/ratings/send_didnt_use`
+- **Request body:** JSON `SendDidntUseData` (Go struct in package main)
 - **Auth:** requires a logged-in Blendkit API key
 
 ### wrappers

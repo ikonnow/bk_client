@@ -460,6 +460,12 @@ func main() {
 	mux.HandleFunc("/"+vapi+"/ratings/get_rating", GetRatingHandler)
 	mux.HandleFunc("/ratings/send_rating", SendRatingHandler)
 	mux.HandleFunc("/"+vapi+"/ratings/send_rating", SendRatingHandler)
+	mux.HandleFunc("/ratings/get_not_used_reasons", GetNotUsedReasonsHandler)
+	mux.HandleFunc("/"+vapi+"/ratings/get_not_used_reasons", GetNotUsedReasonsHandler)
+	mux.HandleFunc("/ratings/get_didnt_use", GetDidntUseHandler)
+	mux.HandleFunc("/"+vapi+"/ratings/get_didnt_use", GetDidntUseHandler)
+	mux.HandleFunc("/ratings/send_didnt_use", SendDidntUseHandler)
+	mux.HandleFunc("/"+vapi+"/ratings/send_didnt_use", SendDidntUseHandler)
 
 	// WRAPPERS
 	mux.HandleFunc("/wrappers/get_download_url", GetDownloadURLWrapper)
@@ -2064,6 +2070,234 @@ func SendRating(data SendRatingData) {
 		msg = fmt.Sprintf("Rated %s=%.1f successfully", data.RatingType, data.RatingValue)
 	}
 
+	TaskFinishCh <- &TaskFinish{
+		AppID:   data.AppID,
+		TaskID:  taskUUID,
+		Message: msg,
+		Result:  respData,
+	}
+}
+
+func GetNotUsedReasonsHandler(w http.ResponseWriter, r *http.Request) {
+	var data MinimalTaskData
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		http.Error(w, "Error parsing JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	go GetNotUsedReasons(data)
+	w.WriteHeader(http.StatusOK)
+}
+
+// GetNotUsedReasons fetches the shared "didn't use it" reason choices.
+// The set is admin-managed on the server and identical for all users.
+func GetNotUsedReasons(data MinimalTaskData) {
+	url := fmt.Sprintf("%s/api/v1/enums/not-used-reasons/", *Server)
+	taskUUID := uuid.New().String()
+	AddTaskCh <- NewTask(data, data.AppID, taskUUID, "ratings/get_not_used_reasons")
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		err = fmt.Errorf("get not-used reasons - making request: %w", err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+	req.Header = getHeaders(data.APIKey, *SystemID, data.AddonVersion, data.PlatformVersion, data.AppID)
+
+	resp, err := ClientAPI.Do(req)
+	if err != nil {
+		shortened_err := errors.Unwrap(err)
+		shortened_err = fmt.Errorf("get not-used reasons: %w", shortened_err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: shortened_err, MessageDetailed: err.Error()}
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		_, respString, _ := ParseFailedHTTPResponse(resp)
+		err := fmt.Errorf("get not-used reasons: %s (%s)", respString, resp.Status)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+
+	err = RespIsJSON(resp)
+	if err != nil {
+		err = fmt.Errorf("get not-used reasons: %w", err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+
+	var respData NotUsedReasonsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&respData); err != nil {
+		err = fmt.Errorf("get not-used reasons - decoding response: %w", err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+
+	TaskFinishCh <- &TaskFinish{
+		AppID:   data.AppID,
+		TaskID:  taskUUID,
+		Message: "Not-used reasons obtained",
+		Result:  respData,
+	}
+}
+
+func GetDidntUseHandler(w http.ResponseWriter, r *http.Request) {
+	var data GetDidntUseData
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		http.Error(w, "Error parsing JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	go GetDidntUse(data)
+	w.WriteHeader(http.StatusOK)
+}
+
+// GetDidntUse fetches the user's "I didn't use this asset" flag for one asset.
+func GetDidntUse(data GetDidntUseData) {
+	url := fmt.Sprintf("%s/api/v1/assets/%s/didnt-use", *Server, data.AssetID)
+	taskUUID := uuid.New().String()
+	AddTaskCh <- NewTask(data, data.AppID, taskUUID, "ratings/get_didnt_use")
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		err = fmt.Errorf("get didnt-use - making request: %w", err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+	req.Header = getHeaders(data.APIKey, *SystemID, data.AddonVersion, data.PlatformVersion, data.AppID)
+
+	resp, err := ClientAPI.Do(req)
+	if err != nil {
+		shortened_err := errors.Unwrap(err)
+		shortened_err = fmt.Errorf("get didnt-use: %w", shortened_err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: shortened_err, MessageDetailed: err.Error()}
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		_, respString, _ := ParseFailedHTTPResponse(resp)
+		err := fmt.Errorf("get didnt-use: %s (%s)", respString, resp.Status)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+
+	err = RespIsJSON(resp)
+	if err != nil {
+		err = fmt.Errorf("get didnt-use: %w", err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+
+	var respData DidntUseState
+	if err := json.NewDecoder(resp.Body).Decode(&respData); err != nil {
+		err = fmt.Errorf("get didnt-use - decoding response: %w", err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+
+	TaskFinishCh <- &TaskFinish{
+		AppID:   data.AppID,
+		TaskID:  taskUUID,
+		Message: "Didn't-use state obtained",
+		Result:  respData,
+	}
+}
+
+func SendDidntUseHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var data SendDidntUseData
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		http.Error(w, "Error parsing JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	go SendDidntUse(data)
+	w.WriteHeader(http.StatusOK)
+}
+
+// SendDidntUse sets (PUT, optional reason) or clears (DELETE) the user's
+// "I didn't use this asset" flag. The server refuses to set it while the
+// user's quality/working-hours rating stands (409, rating wins).
+func SendDidntUse(data SendDidntUseData) {
+	url := fmt.Sprintf("%s/api/v1/assets/%s/didnt-use", *Server, data.AssetID)
+	taskUUID := uuid.New().String()
+	AddTaskCh <- NewTask(data, data.AppID, taskUUID, "ratings/send_didnt_use")
+
+	method := http.MethodPut
+	var body io.Reader
+	if data.DidntUse {
+		reqBody, err := json.Marshal(map[string]interface{}{
+			"reason_id":      data.ReasonID,
+			"replace_rating": data.ReplaceRating,
+		})
+		if err != nil {
+			err = fmt.Errorf("send didnt-use - encoding: %w", err)
+			TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+			return
+		}
+		body = bytes.NewBuffer(reqBody)
+	} else {
+		method = http.MethodDelete
+	}
+
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		err = fmt.Errorf("send didnt-use - making %v request: %w", method, err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+	req.Header = getHeaders(data.APIKey, *SystemID, data.AddonVersion, data.PlatformVersion, data.AppID)
+
+	resp, err := ClientAPI.Do(req)
+	if err != nil {
+		shortened_err := errors.Unwrap(err)
+		shortened_err = fmt.Errorf("send didnt-use: %w", shortened_err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: shortened_err, MessageDetailed: err.Error()}
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		jsonBody, respString, _ := ParseFailedHTTPResponse(resp)
+		// The add-on shows this sentence inline under the control - hand it
+		// the server's detail, not a JSON blob.
+		detail := respString
+		var parsed struct {
+			Detail string `json:"detail"`
+		}
+		if err := json.Unmarshal(jsonBody, &parsed); err == nil && parsed.Detail != "" {
+			detail = parsed.Detail
+		}
+		err := fmt.Errorf("send didnt-use: %s (%s)", detail, resp.Status)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+
+	err = RespIsJSON(resp)
+	if err != nil {
+		err = fmt.Errorf("send didnt-use: %w", err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+
+	var respData DidntUseState
+	if err := json.NewDecoder(resp.Body).Decode(&respData); err != nil {
+		err = fmt.Errorf("send didnt-use - decoding response: %w", err)
+		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskUUID, Error: err}
+		return
+	}
+
+	var msg string
+	if data.DidntUse {
+		msg = "Marked as not used"
+	} else {
+		msg = "Not-used mark removed"
+	}
 	TaskFinishCh <- &TaskFinish{
 		AppID:   data.AppID,
 		TaskID:  taskUUID,

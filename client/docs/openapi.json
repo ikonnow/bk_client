@@ -1070,6 +1070,74 @@
         "x-requires-api-key": true
       }
     },
+    "/ratings/get_didnt_use": {
+      "post": {
+        "description": "Fetches the user's \"I didn't use this asset\" flag for an asset.\n\nRequires a logged-in Blendkit API key.",
+        "operationId": "GetDidntUseHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `GetDidntUseData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "GetDidntUseData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get didn't-use flag",
+        "tags": [
+          "ratings"
+        ],
+        "x-requires-api-key": true
+      }
+    },
+    "/ratings/get_not_used_reasons": {
+      "post": {
+        "description": "Fetches the shared choice set for the \"didn't use it\" feedback.\n\nRequires a logged-in Blendkit API key.",
+        "operationId": "GetNotUsedReasonsHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `MinimalTaskData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "MinimalTaskData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get not-used reasons",
+        "tags": [
+          "ratings"
+        ],
+        "x-requires-api-key": true
+      }
+    },
     "/ratings/get_rating": {
       "post": {
         "description": "Fetches the user's ratings for an asset.\n\nRequires a logged-in Blendkit API key.",
@@ -1098,6 +1166,40 @@
           }
         },
         "summary": "Get asset rating",
+        "tags": [
+          "ratings"
+        ],
+        "x-requires-api-key": true
+      }
+    },
+    "/ratings/send_didnt_use": {
+      "post": {
+        "description": "Sets (with an optional reason) or clears the user's \"I didn't use this asset\" flag. Only POST is accepted.\n\nRequires a logged-in Blendkit API key.",
+        "operationId": "SendDidntUseHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `SendDidntUseData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "SendDidntUseData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Set or clear didn't-use flag",
         "tags": [
           "ratings"
         ],
