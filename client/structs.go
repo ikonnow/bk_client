@@ -559,6 +559,49 @@ type SendRatingData struct {
 	RatingValue     float32 `json:"rating_value"`
 }
 
+// One choice from the shared "didn't use it" reason set
+// (GET /api/v1/enums/not-used-reasons/).
+type NotUsedReason struct {
+	ID    int    `json:"id"`
+	Label string `json:"label"`
+}
+
+type NotUsedReasonsResponse struct {
+	Count    int             `json:"count"`
+	Next     string          `json:"next"`
+	Previous string          `json:"previous"`
+	Results  []NotUsedReason `json:"results"`
+}
+
+// The user's "I didn't use this asset" flag as the server returns it
+// (GET/PUT/DELETE /api/v1/assets/{id}/didnt-use).
+type DidntUseState struct {
+	DidntUse bool           `json:"didntUse"`
+	Reason   *NotUsedReason `json:"reason"`
+}
+
+type GetDidntUseData struct {
+	AddonVersion    string `json:"addon_version"`
+	PlatformVersion string `json:"platform_version"`
+	AppID           int    `json:"app_id"`
+	APIKey          string `json:"api_key"`
+	AssetID         string `json:"asset_id"`
+}
+
+type SendDidntUseData struct {
+	AddonVersion    string `json:"addon_version"`
+	PlatformVersion string `json:"platform_version"`
+	AppID           int    `json:"app_id"`
+	APIKey          string `json:"api_key"`
+	AssetID         string `json:"asset_id"`
+	// DidntUse false clears the flag; ReasonID is optional even when setting.
+	DidntUse bool `json:"didnt_use"`
+	ReasonID *int `json:"reason_id"`
+	// ReplaceRating deletes the user's score ratings instead of the server
+	// refusing the flag with 409 - sent by UIs that warned the user first.
+	ReplaceRating bool `json:"replace_rating"`
+}
+
 type Notification struct {
 	ID          int                       `json:"id"`
 	Recipient   NotificationRecipient     `json:"recipient"`

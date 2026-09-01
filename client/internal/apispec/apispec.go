@@ -308,6 +308,24 @@ func Routes() []Route {
 			Description: "Submits a rating for an asset. Only POST is accepted.",
 			Handler:     "SendRatingHandler", RequestType: "SendRatingData", RequiresAPIKey: true,
 		},
+		{
+			Path: "/ratings/get_not_used_reasons", Methods: []string{"POST"}, Versioned: true, Tag: "ratings",
+			Summary:     "Get not-used reasons",
+			Description: "Fetches the shared choice set for the \"didn't use it\" feedback.",
+			Handler:     "GetNotUsedReasonsHandler", RequestType: "MinimalTaskData", RequiresAPIKey: true,
+		},
+		{
+			Path: "/ratings/get_didnt_use", Methods: []string{"POST"}, Versioned: true, Tag: "ratings",
+			Summary:     "Get didn't-use flag",
+			Description: "Fetches the user's \"I didn't use this asset\" flag for an asset.",
+			Handler:     "GetDidntUseHandler", RequestType: "GetDidntUseData", RequiresAPIKey: true,
+		},
+		{
+			Path: "/ratings/send_didnt_use", Methods: []string{"POST"}, Versioned: true, Tag: "ratings",
+			Summary:     "Set or clear didn't-use flag",
+			Description: "Sets (with an optional reason) or clears the user's \"I didn't use this asset\" flag. Only POST is accepted.",
+			Handler:     "SendDidntUseHandler", RequestType: "SendDidntUseData", RequiresAPIKey: true,
+		},
 
 		// WRAPPERS
 		{
