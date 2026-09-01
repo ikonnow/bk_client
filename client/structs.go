@@ -484,6 +484,7 @@ type CommentPostData struct {
 	Timestamp    string `json:"timestamp"`
 	SecurityHash string `json:"security_hash"`
 	Comment      string `json:"comment"`
+	IsValidation bool   `json:"is_validation"`
 }
 
 type CreateCommentData struct {
@@ -494,6 +495,7 @@ type CreateCommentData struct {
 	AssetID         string `json:"asset_id"`
 	CommentText     string `json:"comment_text"`
 	ReplyToID       int    `json:"reply_to_id"`
+	IsValidation    bool   `json:"is_validation"`
 }
 
 type GetCommentsData struct {

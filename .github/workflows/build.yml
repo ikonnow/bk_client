@@ -13,6 +13,14 @@ on:
           - "no"
           - "publish"
         default: "no"
+      blender_tests_branch:
+        description: "Use Blender add-on tests from branch? Change this to test changes in github.com/blenderkit/blenderkit test suite, otherwise just keep main."
+        type: string
+        default: "main"
+
+concurrency: # cancel all previous still running jobs on this PR or commit 
+  group: ${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   get_version:
@@ -35,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: './client/go.mod'
           cache-dependency-path: './client/go.sum'
@@ -45,7 +53,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=0 go build -o out/bk_client-linux-arm64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-linux-arm64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-linux-arm64
@@ -58,7 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: './client/go.mod'
           cache-dependency-path: './client/go.sum'
@@ -68,7 +76,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=0 go build -o out/bk_client-linux-x86_64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-linux-x86_64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-linux-x86_64
@@ -81,7 +89,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: './client/go.mod'
           cache-dependency-path: './client/go.sum'
@@ -91,7 +99,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=0 go build -o out/bk_client-macos-arm64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-macos-arm64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-macos-arm64
@@ -104,7 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: './client/go.mod'
           cache-dependency-path: './client/go.sum'
@@ -114,7 +122,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=0 go build -o out/bk_client-macos-x86_64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-macos-x86_64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-macos-x86_64
@@ -127,7 +135,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: './client/go.mod'
           cache-dependency-path: './client/go.sum'
@@ -152,7 +160,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: './client/go.mod'
           cache-dependency-path: './client/go.sum'
@@ -182,7 +190,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Go 1.20 (last version supporting Windows 7/8)
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.20.14'
         id: go
@@ -199,7 +207,7 @@ jobs:
       - name: Build Blendkit_Client (Windows 7 x86_64)
         working-directory: ./client
         env:
-          CGO_ENABLED: '0'
+          CGO_ENABLED: '1'
           GOOS: windows
           GOARCH: amd64
         run: go build -o out/bk_client-windows7-x86_64.exe -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
@@ -360,10 +368,8 @@ jobs:
           archive: false
           overwrite: true
 
-  release:
+  build_zip:
     runs-on: macos-26
-    permissions:
-      contents: write
     needs: [code_sign_macos, code_sign_windows, get_version, build_linux_x86_64, build_linux_arm]
     steps:
       - uses: actions/checkout@v7
@@ -391,15 +397,232 @@ jobs:
           path: out/v${{ needs.get_version.outputs.version }}/bk_client.zip
           archive: false
 
-      # Real release: run this workflow manually with make_release=publish.
-      # The tag v<version> (from client/VERSION) is created automatically at the
-      # triggering commit, so no manual tagging is needed.
+  release:
+    # Real release: run this workflow manually with make_release=publish.
+    # The tag v<version> (from client/VERSION) is created automatically at the
+    # triggering commit, so no manual tagging is needed.
+    runs-on: ubuntu-latest
+    needs: [build_zip, get_version]
+    if: github.event_name == 'workflow_dispatch' && inputs.make_release == 'publish'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: bk_client.zip
+          path: release
+      - name: Repackage release ZIP
+        # The artifact is uploaded with archive:false, so download-artifact
+        # extracts the zip envelope and we get its loose contents back. Re-zip
+        # them (restoring exec bits stripped during extraction) to recreate the
+        # bk_client.zip asset for the release.
+        run: |
+          echo "Downloaded files:"
+          ls -R release
+          chmod 755 release/bk_client-linux-* release/bk_client-macos-* 2>/dev/null || true
+          ( cd release && zip -r -X ../bk_client.zip . )
+          echo "Repackaged bk_client.zip:"
+          unzip -l bk_client.zip
       - name: Publish signed GitHub Release
-        if: github.event_name == 'workflow_dispatch' && inputs.make_release == 'publish'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.get_version.outputs.version }}
           name: bk_client v${{ needs.get_version.outputs.version }}
           draft: false
           fail_on_unmatched_files: true
-          files: out/v${{ needs.get_version.outputs.version }}/bk_client.zip
+          files: bk_client.zip
+
+# MARK: TESTS
+  make_blenderkit_tests_matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: blenderkit/blenderkit
+          ref: ${{ inputs.blender_tests_branch }}
+      - id: set-matrix
+        run: python .github/make-tests-matrix.py >> $GITHUB_OUTPUT
+
+  blenderkit_TESTS_ubuntu_x86_64:
+    needs: [make_blenderkit_tests_matrix, build_linux_x86_64, get_version]
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.make_blenderkit_tests_matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: blenderkit/blenderkit
+          ref: ${{ inputs.blender_tests_branch }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: bk_client-linux-x86_64
+          path: prebuilt
+
+      - run: echo $VERSION > prebuilt/VERSION
+        env:
+          VERSION: ${{ needs.get_version.outputs.version }}
+      - run: ls prebuilt
+      - run: cat prebuilt/VERSION
+
+      - run: echo $GIT_DISCOVERY_ACROSS_FILESYSTEM
+      - run: pwd
+      - name: Checkout bk_proxor submodule
+        run: git submodule update --init bk_proxor
+
+      - name: Make prebuilt client executable
+        run: chmod +x prebuilt/bk_client-linux-x86_64
+
+      - name: Single binary build
+        run: python dev.py build --client-build prebuilt
+
+      - name: Cache Blender
+        id: blenderBinaryCache
+        uses: actions/cache@v6
+        with:
+          path: $HOME/blender
+          key: blender-${{matrix.version}}-${{matrix.sha}}
+      - name: Check Blender binary exists
+        id: blenderBinaryCheck
+        run: test -f $HOME/blender/blender || echo "BLENDER_BINARY_MISSING=true" >> $GITHUB_OUTPUT
+      - name: Download Blender
+        if: steps.blenderBinaryCheck.outputs.BLENDER_BINARY_MISSING == 'true'
+        run: curl -fL ${{ matrix.download_url }} -o $HOME/blender.tar.xz
+      - name: Mkdir
+        run: mkdir {$HOME/.local/bin,$HOME/blender} -p
+      - name: Extract Blender
+        if: steps.blenderBinaryCheck.outputs.BLENDER_BINARY_MISSING == 'true'
+        run: tar -xf $HOME/blender.tar.xz -C $HOME/blender --strip-components=1
+      - name: Add Blender to PATH
+        run: ln -s $HOME/blender/blender $HOME/.local/bin/blender
+      - name: TEST
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python dev.py test --client-build prebuilt --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons 
+
+
+  blenderkit_TESTS_debian_x86_64:
+    needs: [make_blenderkit_tests_matrix, build_linux_x86_64, get_version]
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    container: debian:latest
+    strategy:
+      matrix: ${{ fromJSON(needs.make_blenderkit_tests_matrix.outputs.matrix) }}
+    steps:
+      - run: apt update
+      - run: apt install -y python3 curl xz-utils git libxrender1 libxxf86vm1 libxi6 libxfixes3 libxkbcommon0 libsm6 libgl1
+      - run: git config --global --add safe.directory $PWD
+
+      - uses: actions/checkout@v7
+        with:
+          repository: blenderkit/blenderkit
+          ref: ${{ inputs.blender_tests_branch }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: bk_client-linux-x86_64
+          path: prebuilt
+
+      - run: echo $VERSION > prebuilt/VERSION
+        env:
+          VERSION: ${{ needs.get_version.outputs.version }}
+      - run: ls prebuilt
+      - run: cat prebuilt/VERSION
+
+      - name: Checkout bk_proxor submodule
+        run: git submodule update --init bk_proxor
+
+      - name: Make prebuilt client executable
+        run: chmod +x prebuilt/bk_client-linux-x86_64
+
+      - name: Single binary build
+        run: python3 dev.py build --client-build prebuilt
+
+      - name: Cache Blender
+        id: blenderBinaryCache
+        uses: actions/cache@v6
+        with:
+          path: $HOME/blender
+          key: blender-${{matrix.version}}-${{matrix.sha}}
+      - name: Mkdir
+        run: mkdir $HOME/blender -p
+      - name: Check Blender binary exists
+        id: blenderBinaryCheck
+        run: test -f $HOME/blender/blender || echo "BLENDER_BINARY_MISSING=true" >> $GITHUB_OUTPUT
+      - name: Download Blender
+        if: steps.blenderBinaryCheck.outputs.BLENDER_BINARY_MISSING == 'true'
+        run: curl -fL ${{ matrix.download_url }} -o $HOME/blender.tar.xz
+      - name: Extract Blender
+        if: steps.blenderBinaryCheck.outputs.BLENDER_BINARY_MISSING == 'true'
+        run: tar -xf $HOME/blender.tar.xz -C $HOME/blender --strip-components=1
+
+      - run: echo $PATH
+      - name: Add Blender to PATH
+        run: ln -s $HOME/blender/blender /usr/local/bin/blender
+
+      - name: TEST
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 dev.py test --client-build prebuilt --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons
+
+  blenderkit_TESTS_fedora_x86_64:
+    needs: [make_blenderkit_tests_matrix, build_linux_x86_64, get_version]
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    strategy:
+      matrix: ${{ fromJSON(needs.make_blenderkit_tests_matrix.outputs.matrix) }}
+    steps:
+      - run: dnf install -y git libXrender libXxf86vm libXi libXfixes mesa-libGL libxkbcommon libSM
+      - run: git config --global --add safe.directory $PWD
+      - uses: actions/checkout@v7
+        with:
+          repository: blenderkit/blenderkit
+          ref: ${{ inputs.blender_tests_branch }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: bk_client-linux-x86_64
+          path: prebuilt
+
+      - run: echo $VERSION > prebuilt/VERSION
+        env:
+          VERSION: ${{ needs.get_version.outputs.version }}
+      - run: ls prebuilt
+      - run: cat prebuilt/VERSION
+
+      - name: Checkout bk_proxor submodule
+        run: git submodule update --init bk_proxor
+
+      - name: Make prebuilt client executable
+        run: chmod +x prebuilt/bk_client-linux-x86_64
+
+      - name: Single binary build
+        run: python dev.py build --client-build prebuilt
+
+      - name: Cache Blender
+        id: blenderBinaryCache
+        uses: actions/cache@v6
+        with:
+          path: $HOME/blender
+          key: blender-${{matrix.version}}-${{matrix.sha}}
+      - name: Mkdir
+        run: mkdir $HOME/blender -p
+      - name: Check Blender binary exists
+        id: blenderBinaryCheck
+        run: test -f $HOME/blender/blender || echo "BLENDER_BINARY_MISSING=true" >> $GITHUB_OUTPUT
+      - name: Download Blender
+        if: steps.blenderBinaryCache.outputs.cache-hit != 'true'
+        run: curl -fL ${{ matrix.download_url }} -o $HOME/blender.tar.xz
+      - name: Extract Blender
+        if: steps.blenderBinaryCache.outputs.cache-hit != 'true'
+        run: tar -xf $HOME/blender.tar.xz -C $HOME/blender --strip-components=1
+
+      - run: echo $PATH
+      - name: Add Blender to PATH
+        run: ln -s $HOME/blender/blender /usr/local/bin/blender
+
+      - name: TEST
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python dev.py test --client-build prebuilt --install-at $HOME/.config/blender/${{matrix.version_x_y}}/scripts/addons 

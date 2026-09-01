@@ -41,6 +41,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -99,8 +100,8 @@ def live_env() -> dict:
     """
     dotenv = load_dotenv()
     env = {**os.environ}
-    api_key = dotenv.get("API_KEY") or dotenv.get("BLENDKIT_API_KEY")
-    server = dotenv.get("BLENDKIT_SERVER") or DEVEL_SERVER
+    api_key = dotenv.get("API_KEY") or dotenv.get("BLENDKIT_API_KEY") or dotenv.get("BLENDERKIT_API_KEY")
+    server = dotenv.get("BLENDKIT_SERVER") or dotenv.get("BLENDERKIT_SERVER") or DEVEL_SERVER
     if api_key:
         env["BLENDKIT_API_KEY"] = api_key
     env["BLENDKIT_SERVER"] = server
@@ -183,9 +184,11 @@ def read_client_version() -> str:
 
 
 def build(args: argparse.Namespace) -> None:
-    """Cross-compile the Client for all supported platforms.
+    """Compile the Blendkit Client for current platform.
 
-    Binaries are written to ``<out>/v<version>/`` so the directory name matches
+    Built binary can be used for local testing or later used in GitHub actions for multi-platform release build.
+    Cross-compilation is not possible as parts of the Blendkit Client requires CGO.
+    Binary is written to ``<out>/v<version>/`` so the directory name matches
     the format expected by the add-on repos' ``copy_client_binaries`` step.
 
     Args:
@@ -193,41 +196,41 @@ def build(args: argparse.Namespace) -> None:
     """
     version = read_client_version()
     out_dir = os.path.abspath(os.path.join(args.out, f"v{version}"))
+    if os.path.isdir(args.out):
+        shutil.rmtree(args.out)
     os.makedirs(out_dir, exist_ok=True)
     ldflags = f"-X main.ClientVersion={version}"
 
-    processes = []
-    for goos, goarch, output in BUILD_TARGETS:
-        build_path = os.path.join(out_dir, output)
-        env = {**os.environ, "GOOS": goos, "GOARCH": goarch, "CGO_ENABLED": "0"}
-        proc = subprocess.Popen(
-            ["go", "build", "-o", build_path, "-ldflags", ldflags, "."],
-            env=env,
-            cwd=CLIENT_DIR,
-        )
-        processes.append(((goos, goarch), proc))
+    os_name = platform.system().lower()
+    architecture = platform.machine().lower()
+    if architecture == "aarch64":
+        architecture = "arm64"
+    for target in BUILD_TARGETS:
+        if target[0] != os_name:
+            continue
+        if target[1] != architecture:
+            continue
+        goos, goarch, bin_name = target
+        break
+    print(f"Building for {goos} ({goarch}), binary name: {bin_name}")
 
-    print(f"Blendkit-Client v{version} build started for {len(processes)} platforms.")
-    builds_ok = True
-    for target, proc in processes:
-        proc.wait()
-        if proc.returncode != 0:
-            print(f"Client build {target} failed")
-            builds_ok = False
+    build_path = os.path.join(out_dir, bin_name)
+    env = {**os.environ, "GOOS": goos, "GOARCH": goarch, "CGO_ENABLED": "1"}
+    proc = subprocess.Popen(
+        ["go", "build", "-o", build_path, "-ldflags", ldflags, "."],
+        env=env,
+        cwd=CLIENT_DIR,
+    )
+    print(f"Blendkit-Client v{version} build started.")
 
-    if not builds_ok:
+    proc.wait()
+    if proc.returncode != 0:
+        print(f"Client build {target} failed")
         sys.exit(1)
-    print(f"Blendkit-Client v{version} builds completed in {out_dir}.")
+
+    print(f"Blendkit-Client v{version} build completed in {out_dir}.")
 
     zip_path = package(out_dir, version)
-
-    # Ship only the bundle: the per-platform binaries are now inside
-    # bk_client.zip, so drop the loose copies and leave a single release
-    # artifact in the output directory.
-    for _goos, _goarch, output in BUILD_TARGETS:
-        bin_path = os.path.join(out_dir, output)
-        if os.path.isfile(bin_path):
-            os.remove(bin_path)
     print(f"Release artifact: {zip_path}")
 
 
@@ -361,6 +364,15 @@ def _write_release_zip(zip_path: str, root: str, out_dir: str, binaries: list[di
         # Bundled recipes + their manifests (skip caches/helpers).
         _add_dir_to_zip(zf, TOOLS_DIR, f"{prefix}tools", _keep_tool)
 
+        # Vendored MaterialX package: full subtree so the loose tools/ matches
+        # the `all:tools/bk_mtlx` embed (keeps package __init__.py files).
+        _add_tree_to_zip(
+            zf,
+            os.path.join(TOOLS_DIR, "bk_mtlx"),
+            f"{prefix}tools/bk_mtlx",
+            lambda name: name.endswith((".py", ".json")),
+        )
+
         # Generated API docs.
         for doc in ("API.md", "openapi.json"):
             doc_path = os.path.join(DOCS_DIR, doc)
@@ -398,6 +410,36 @@ def _add_dir_to_zip(
         path = os.path.join(src_dir, name)
         if os.path.isfile(path):
             zf.write(path, f"{arc_dir}/{name}")
+
+
+def _add_tree_to_zip(
+    zf: zipfile.ZipFile,
+    src_dir: str,
+    arc_dir: str,
+    keep: Callable[[str], bool] | None = None,
+) -> None:
+    """Recursively add *src_dir* to *zf* under *arc_dir*, preserving structure.
+
+    Unlike :func:`_add_dir_to_zip`, this walks subdirectories and keeps files
+    whose names begin with ``_`` (e.g. package ``__init__.py``), skipping only
+    ``__pycache__``.
+
+    Args:
+        zf: The open zip archive to write into.
+        src_dir: Source directory whose tree is added (recursive).
+        arc_dir: Destination path prefix inside the archive.
+        keep: Optional predicate ``(name) -> bool`` selecting which filenames to include.
+    """
+    if not os.path.isdir(src_dir):
+        return
+    for dirpath, dirnames, filenames in os.walk(src_dir):
+        dirnames[:] = sorted(d for d in dirnames if d != "__pycache__")
+        rel = os.path.relpath(dirpath, src_dir)
+        arc_sub = arc_dir if rel == "." else f"{arc_dir}/{rel.replace(os.sep, '/')}"
+        for name in sorted(filenames):
+            if keep is not None and not keep(name):
+                continue
+            zf.write(os.path.join(dirpath, name), f"{arc_sub}/{name}")
 
 
 def run(args: argparse.Namespace) -> None:
@@ -709,12 +751,60 @@ def docs(args: argparse.Namespace) -> None:
     print("=== API documentation regenerated ===")
 
 
+def docker_test(args: argparse.Namespace) -> None:
+    """Run the Go tests inside a golang container for a clean, host-independent run.
+
+    Without ``--live`` this runs the offline unit tests. With ``--live`` it runs
+    the ``live``-tagged integration tests against a real server, injecting the
+    credentials from .env with the same API_KEY -> BLENDKIT_API_KEY remapping
+    that ``dev.py live`` performs (which Docker's ``--env-file`` cannot do).
+
+    Args:
+        args: Parsed CLI arguments. Uses ``args.live``.
+    """
+    image = "golang:1.26"
+    docker_cmd = [
+        "docker",
+        "run",
+        "--rm",
+        "-v",
+        f"{os.getcwd()}:/src",
+        "-v",
+        "bk_client-gocache:/root/.cache/go-build",
+        "-v",
+        "bk_client-gomodcache:/go/pkg/mod",
+        "-w",
+        "/src/client",
+        "-e",
+        "CGO_ENABLED=0",
+    ]
+
+    if args.live:
+        env = live_env()
+        server = env["BLENDKIT_SERVER"]
+        docker_cmd += ["-e", f"BLENDKIT_SERVER={server}"]
+        docker_cmd += ["-e", "BLENDKIT_LIVE=1"]  # force the public tests to run instead of skipping
+        if "BLENDKIT_API_KEY" in env:
+            docker_cmd += ["-e", f"BLENDKIT_API_KEY={env['BLENDKIT_API_KEY']}"]
+        else:
+            print("warning: no API_KEY found in .env; auth-requiring live tests will skip")
+        print(f"=== Running live tests in Docker against {server} ===")
+        test_cmd = ["go", "test", "-tags=live", "-run", "TestLive", "-v", "./..."]
+    else:
+        print("=== Running unit tests in Docker ===")
+        test_cmd = ["go", "test", "./..."]
+
+    proc = subprocess.Popen([*docker_cmd, image, *test_cmd])
+    proc.wait()
+    sys.exit(proc.returncode or 0)
+
+
 def main():
     """Parse CLI arguments and dispatch to the selected command."""
     parser = argparse.ArgumentParser(description="Blendkit-Client developer helper.")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_build = sub.add_parser("build", help="Cross-compile the Client for all platforms.")
+    p_build = sub.add_parser("build", help="Compile the Client for current platform.")
     p_build.add_argument("--out", default="out", help="Output directory (default: ./out).")
     p_build.set_defaults(func=build)
 
@@ -741,6 +831,16 @@ def main():
     p_release.set_defaults(func=release)
 
     sub.add_parser("test", help="Run Go unit tests and lint Python recipes.").set_defaults(func=test)
+    p_docker = sub.add_parser(
+        "docker",
+        help="Run the Go tests inside a golang container (host-independent).",
+    )
+    p_docker.add_argument(
+        "--live",
+        action="store_true",
+        help="Run the live integration tests against a real server (creds from .env).",
+    )
+    p_docker.set_defaults(func=docker_test)
     sub.add_parser("lint", help="Lint Python recipes (ruff + pydoclint).").set_defaults(func=lint)
     sub.add_parser("format", help="Format/auto-fix Python recipes with ruff.").set_defaults(func=format_code)
     sub.add_parser("docs", help="Regenerate API documentation (go generate).").set_defaults(func=docs)

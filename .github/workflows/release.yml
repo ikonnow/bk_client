@@ -31,14 +31,14 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: client/go.mod
           cache-dependency-path: client/go.sum
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
@@ -54,7 +54,7 @@ jobs:
         run: echo "path=out/v${{ steps.ver.outputs.version }}/bk_client.zip" >> "$GITHUB_OUTPUT"
 
       - name: Upload bundle artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bk_client
           path: ${{ steps.bundle.outputs.path }}
@@ -63,7 +63,7 @@ jobs:
       # Optional draft release when manually testing via workflow_dispatch.
       - name: Publish draft release (manual test)
         if: github.event_name == 'workflow_dispatch' && inputs.make_release == 'draft'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ci-test-${{ github.run_number }}
           name: CI test build ${{ steps.ver.outputs.version }} (run ${{ github.run_number }})
