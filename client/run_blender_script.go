@@ -40,6 +40,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -346,8 +347,13 @@ func doRunBlenderScript(data RunBlenderScriptData, taskID string) {
 		AppID: data.AppID, TaskID: taskID, Progress: 10, Message: "Launching Blender",
 	}
 
-	// blender --background [<blend>] --python <script> -- [<params.json>]
-	cmdArgs := []string{"--background"}
+	// blender --background --factory-startup [<blend>] --python <script> -- [<params.json>]
+	// --factory-startup disables user addons/prefs so a recipe run is reproducible
+	// and independent of whatever the user has installed. Without it, a user's own
+	// BlenderKit addon (or a validator addon that refuses to run headless) loads and
+	// can make Blender exit non-zero even after the recipe finished. The recipes in
+	// tools/ are self-contained (bpy + stdlib only), so this is always safe.
+	cmdArgs := []string{"--background", "--factory-startup"}
 	if data.BlendPath != "" {
 		cmdArgs = append(cmdArgs, data.BlendPath)
 	}
@@ -375,15 +381,30 @@ func doRunBlenderScript(data RunBlenderScriptData, taskID string) {
 	// Stream stdout/stderr as task messages with non-blocking sends so a
 	// flooded TaskMessageCh can't wedge cmd.Wait.
 	var wg sync.WaitGroup
+	var outputMu sync.Mutex
+	var output strings.Builder
+	appendOutput := func(line string) {
+		outputMu.Lock()
+		defer outputMu.Unlock()
+		output.WriteString(line)
+		output.WriteByte('\n')
+		if output.Len() > 16000 {
+			trimmed := output.String()
+			output.Reset()
+			output.WriteString(trimmed[len(trimmed)-16000:])
+		}
+	}
 	wg.Add(2)
 	streamReader := func(r io.Reader, prefix string) {
 		defer wg.Done()
 		s := bufio.NewScanner(r)
 		s.Buffer(make([]byte, 64*1024), 1024*1024)
 		for s.Scan() {
+			line := prefix + s.Text()
+			appendOutput(line)
 			update := &TaskMessageUpdate{
 				AppID: data.AppID, TaskID: taskID,
-				Message: statusMsg, MessageDetailed: prefix + s.Text(),
+				Message: statusMsg, MessageDetailed: line,
 			}
 			select {
 			case TaskMessageCh <- update:
@@ -396,8 +417,11 @@ func doRunBlenderScript(data RunBlenderScriptData, taskID string) {
 	wg.Wait()
 
 	if err := cmd.Wait(); err != nil {
+		outputMu.Lock()
+		diagnostic := output.String()
+		outputMu.Unlock()
 		TaskErrorCh <- &TaskError{AppID: data.AppID, TaskID: taskID,
-			Error: fmt.Errorf("blender exited with error: %w", err)}
+			Error: fmt.Errorf("blender exited with error: %w", err), MessageDetailed: diagnostic}
 		return
 	}
 

@@ -1105,14 +1105,15 @@ def write_mtlx_reference_layer(layer_path: str, geom_rel: str, mapping: dict) ->
         if not surf:
             log(f"mtlx-ref: no <surfacematerial> in {mtlx_rel}; skipping")
             continue
+        surf_path = _usd_safe_name(surf)
         prim = _usd_safe_name(entry.get("name", ""))
         body.append(f'        over "{prim}" (')
-        body.append(f"            prepend references = @./{mtlx_rel}@</MaterialX/Materials/{surf}>")
+        body.append(f"            prepend references = @./{mtlx_rel}@</MaterialX/Materials/{surf_path}>")
         body.append("        )")
         body.append("        {")
         body.append("        }")
         wired += 1
-        log(f"mtlx-ref: {prim} -> {mtlx_rel} </MaterialX/Materials/{surf}>")
+        log(f"mtlx-ref: {prim} -> {mtlx_rel} </MaterialX/Materials/{surf_path}>")
 
     # Stage metadata (upAxis/metersPerUnit) is read only from the ROOT layer and
     # is NOT inherited from sublayers, so replicate the crate's Blender export
