@@ -71,6 +71,10 @@ type Shared struct {
 	// Server is the Blendkit server address the Client is connected to and
 	// that all plugins must use as the source of truth.
 	Server string `json:"server"`
+	// UsageDataOptOut, when true, stops the Client from forwarding usage
+	// reports (the assets present in a file at save/render time). The zero
+	// value keeps sending, so existing installs are unaffected.
+	UsageDataOptOut bool `json:"usage_data_opt_out"`
 }
 
 // Executable describes an external program (e.g. Blender) the Client stores on
