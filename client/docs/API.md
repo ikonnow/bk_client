@@ -157,7 +157,7 @@ Primary polling endpoint for Blender add-ons. Subscribes the add-on on first cal
 
 #### `POST /report_event`
 
-Fire-and-forget telemetry (e.g. login funnel events). The Client forwards the event to the server with standard headers in the background; failures are only logged, never surfaced to the UI.
+Fire-and-forget telemetry (e.g. login funnel events). The Client forwards the event to the server with standard headers in the background; failures are only logged, never surfaced to the UI. Dropped when the shared setting `usage_data_opt_out` is true - everything on this route is optional by definition.
 
 - **Handler:** `ReportEventHandler`
 - **Versioned alias:** `/vX.Y/report_event`

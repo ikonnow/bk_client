@@ -31,6 +31,13 @@ func ReportEventHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Telemetry is optional by definition: everything on this route is dropped
+	// when the user opted out of sending usage data (Shared.UsageDataOptOut).
+	// Anything the service itself needs must never ride this route.
+	if SettingsStore != nil && SettingsStore.Snapshot().Shared.UsageDataOptOut {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	go forwardEvent(data)
 	w.WriteHeader(http.StatusOK)
 }
