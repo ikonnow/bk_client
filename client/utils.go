@@ -19,6 +19,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -99,6 +100,80 @@ func validSystemID(s string) bool {
 		}
 	}
 	return true
+}
+
+// systemIDFilePath mirrors the add-on's paths.get_system_id_filepath().
+func systemIDFilePath() string {
+	home := os.Getenv("XDG_DATA_HOME")
+	if home == "" {
+		var err error
+		home, err = os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+	}
+	return filepath.Join(home, "blenderkit_data", "system_id")
+}
+
+// persistedSystemID returns the machine ID stored in the data directory, or "" when
+// the file is absent or holds anything but 15 digits.
+func persistedSystemID() string {
+	path := systemIDFilePath()
+	if path == "" {
+		return ""
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	id := strings.TrimSpace(string(content))
+	if !validSystemID(id) {
+		return ""
+	}
+	return id
+}
+
+// persistSystemID writes the machine ID atomically (temp file + rename), so a
+// concurrently starting Client never reads a half-written file.
+func persistSystemID(id string) error {
+	path := systemIDFilePath()
+	if path == "" {
+		return errors.New("no home directory to store the system_id in")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp := fmt.Sprintf("%s.%d.tmp", path, os.Getpid())
+	if err := os.WriteFile(tmp, []byte(id), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// resolveSystemID returns the machine ID the Client reports and owns its persistence.
+//
+// Precedence: the --system_id flag, the ID stored in the data directory, and only
+// then the MAC-derived nodeID - which is then written down so the next start
+// reports the same machine even after MAC randomization or an adapter change.
+// The Client is the writer; add-ons only read the file (Blender add-on
+// paths.get_stable_system_id()). Seeding from the Client's own MAC value keeps the
+// ID the server already knows: measured on production, Python's uuid.getnode()
+// picks a different adapter than this Client on 79% of Windows machines, so an
+// add-on-written seed would have renamed most of them.
+func resolveSystemID(override, nodeID string) string {
+	if override != "" {
+		if validSystemID(override) {
+			return override
+		}
+		BKLog.Printf("Ignoring invalid --system_id %q", override)
+	}
+	if persisted := persistedSystemID(); persisted != "" {
+		return persisted
+	}
+	if err := persistSystemID(nodeID); err != nil {
+		BKLog.Printf("%s Could not persist system_id, reporting the MAC-derived ID: %v", EmoWarning, err)
+	}
+	return nodeID
 }
 
 func StringToAddonVersion(s string) (*AddonVersionStruct, error) {

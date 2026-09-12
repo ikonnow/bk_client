@@ -20,6 +20,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -203,6 +205,71 @@ func TestValidSystemID(t *testing.T) {
 		if actual := validSystemID(test.id); actual != test.expected {
 			t.Errorf("validSystemID(%q) = %v; want %v", test.id, actual, test.expected)
 		}
+	}
+}
+
+func TestResolveSystemID(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dir)
+	path := filepath.Join(dir, "blenderkit_data", "system_id")
+	const node = "000000000000042"
+
+	if got := resolveSystemID("000000000000007", node); got != "000000000000007" {
+		t.Errorf("valid flag: got %q; want the flag value", got)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("a flag must not be persisted, file exists: %v", err)
+	}
+
+	if got := resolveSystemID("not-an-id", node); got != node {
+		t.Errorf("invalid flag, no file: got %q; want MAC-derived %q", got, node)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("first run must persist the MAC-derived ID: %v", err)
+	}
+	if string(content) != node {
+		t.Errorf("persisted %q; want %q", content, node)
+	}
+
+	if err := os.WriteFile(path, []byte("000000000000123\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveSystemID("", node); got != "000000000000123" {
+		t.Errorf("valid file beats MAC: got %q; want 000000000000123", got)
+	}
+
+	if err := os.WriteFile(path, []byte("garbage"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveSystemID("", node); got != node {
+		t.Errorf("garbage file: got %q; want MAC-derived %q", got, node)
+	}
+	if content, _ := os.ReadFile(path); string(content) != node {
+		t.Errorf("garbage file must be replaced, got %q", content)
+	}
+}
+
+func TestResolveSystemIDUnwritableDataDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dir)
+	// A file where the data directory should be makes MkdirAll fail.
+	if err := os.WriteFile(filepath.Join(dir, "blenderkit_data"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveSystemID("", "000000000000042"); got != "000000000000042" {
+		t.Errorf("unwritable dir: got %q; want the MAC-derived ID", got)
+	}
+}
+
+func TestPersistedSystemIDWithoutHome(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("HOME", "")
+	if got := persistedSystemID(); got != "" {
+		t.Errorf("no home: got %q; want empty", got)
+	}
+	if err := persistSystemID("000000000000042"); err == nil {
+		t.Error("no home: persist must fail instead of writing somewhere")
 	}
 }
 
