@@ -358,6 +358,8 @@ func main() {
 	mux.HandleFunc("/"+vapi+"/report", reportHandler)
 	mux.HandleFunc("/report_event", ReportEventHandler)
 	mux.HandleFunc("/"+vapi+"/report_event", ReportEventHandler)
+	mux.HandleFunc("/report_usages", ReportUsagesHandler)
+	mux.HandleFunc("/"+vapi+"/report_usages", ReportUsagesHandler)
 	mux.HandleFunc("/shutdown", shutdownHandler)
 	mux.HandleFunc("/"+vapi+"/shutdown", shutdownHandler)
 	mux.HandleFunc("/debug", DebugNetworkHandler)

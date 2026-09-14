@@ -5,7 +5,7 @@
       "name": "GPL-2.0-or-later"
     },
     "title": "Blendkit-Client API",
-    "version": "1.12.17"
+    "version": "1.12.18"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1334,6 +1334,39 @@
           }
         },
         "summary": "Report a telemetry event",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/report_usages": {
+      "post": {
+        "description": "Forwards the `report` field untouched to the server's /api/v1/scene_save_reports/ with standard headers as a `report_usages` task. Dropped without a task when the shared setting `usage_data_opt_out` is true.",
+        "operationId": "ReportUsagesHandler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "JSON body. See Go struct `ReportUsagesData` in package main (client/structs.go and related files).",
+                "type": "object",
+                "x-go-type": "ReportUsagesData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response."
+          },
+          "400": {
+            "description": "Bad request (invalid or unparseable body)."
+          },
+          "500": {
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Report the assets present in a file at a save or a render",
         "tags": [
           "core"
         ]

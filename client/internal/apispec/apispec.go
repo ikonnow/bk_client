@@ -87,6 +87,12 @@ func Routes() []Route {
 			Handler:     "ReportEventHandler", RequestType: "ReportEventData",
 		},
 		{
+			Path: "/report_usages", Methods: []string{"POST"}, Versioned: true, Tag: "core",
+			Summary:     "Report the assets present in a file at a save or a render",
+			Description: "Forwards the `report` field untouched to the server's /api/v1/scene_save_reports/ with standard headers as a `report_usages` task. Dropped without a task when the shared setting `usage_data_opt_out` is true.",
+			Handler:     "ReportUsagesHandler", RequestType: "ReportUsagesData",
+		},
+		{
 			Path: "/shutdown", Methods: []string{"GET", "POST"}, Versioned: true, Tag: "core",
 			Summary:     "Shut down the Client",
 			Description: "Schedules a graceful exit of the Client process shortly after responding 200 OK.",

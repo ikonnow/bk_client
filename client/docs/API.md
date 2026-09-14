@@ -2,7 +2,7 @@
 
 > Generated from `internal/apispec` by `cmd/apidocgen`. Do not edit by hand.
 
-**Client version:** `1.12.17`
+**Client version:** `1.12.18`
 
 The Client is a local HTTP server (default port **62485**) that bridges Blendkit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the Blendkit web service.
 
@@ -19,6 +19,7 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 | GET | `/` |  |  | Client status page | — |
 | POST | `/report` | ✓ |  | Poll for tasks (Blender) | `GetReportData` |
 | POST | `/report_event` | ✓ |  | Report a telemetry event | `ReportEventData` |
+| POST | `/report_usages` | ✓ |  | Report the assets present in a file at a save or a render | `ReportUsagesData` |
 | GET, POST | `/shutdown` | ✓ |  | Shut down the Client | — |
 | GET | `/debug` | ✓ |  | Network/debug diagnostics | — |
 | GET | `/dev` | ✓ |  | Developer test dashboard | — |
@@ -161,6 +162,14 @@ Fire-and-forget telemetry (e.g. login funnel events). The Client forwards the ev
 - **Handler:** `ReportEventHandler`
 - **Versioned alias:** `/vX.Y/report_event`
 - **Request body:** JSON `ReportEventData` (Go struct in package main)
+
+#### `POST /report_usages`
+
+Forwards the `report` field untouched to the server's /api/v1/scene_save_reports/ with standard headers as a `report_usages` task. Dropped without a task when the shared setting `usage_data_opt_out` is true.
+
+- **Handler:** `ReportUsagesHandler`
+- **Versioned alias:** `/vX.Y/report_usages`
+- **Request body:** JSON `ReportUsagesData` (Go struct in package main)
 
 #### `GET / POST /shutdown`
 
