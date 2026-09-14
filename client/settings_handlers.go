@@ -36,6 +36,8 @@ var SettingsStore *settings.Store
 type SetSettingsData struct {
 	// Server, when non-nil, replaces the shared server address.
 	Server *string `json:"server,omitempty"`
+	// UsageDataOptOut, when non-nil, sets whether usage reports are dropped.
+	UsageDataOptOut *bool `json:"usage_data_opt_out,omitempty"`
 }
 
 // SetVariableData is the body of a /settings/set_variable request. An empty
@@ -88,6 +90,9 @@ func setSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	shared := SettingsStore.Snapshot().Shared
 	if data.Server != nil {
 		shared.Server = *data.Server
+	}
+	if data.UsageDataOptOut != nil {
+		shared.UsageDataOptOut = *data.UsageDataOptOut
 	}
 
 	snap, err := SettingsStore.SetShared(shared)

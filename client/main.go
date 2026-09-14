@@ -129,8 +129,8 @@ func init() {
 	TaskCancelCh = make(chan *TaskCancel, 1000)
 	TaskErrorCh = make(chan *TaskError, 1000)
 
-	BKLog = log.New(os.Stdout, "⬡  ", log.LstdFlags)   // Hexagon like Blendkit logo
-	ChanLog = log.New(os.Stdout, "<- ", log.LstdFlags) // Same symbols as channel in Go
+	BKLog = log.New(os.Stdout, "⬡  ", log.LstdFlags|log.Lmicroseconds)   // Hexagon like Blendkit logo
+	ChanLog = log.New(os.Stdout, "<- ", log.LstdFlags|log.Lmicroseconds) // Same symbols as channel in Go
 }
 
 // Endless loop to handle channels
@@ -270,16 +270,13 @@ func main() {
 	StartingSoftwareName = flag.String("software", "", "name of the software whose add-on starts the Client")
 	StartingPID = flag.String("pid", "", "PID of the process (running software) whose add-on starts the Client")
 	singleInstance := flag.Bool("single-instance", false, "if a Client of this version is already running, exit gracefully and leave the original running")
-	systemIDOverride := flag.String("system_id", "", "stable machine ID (15 digits) persisted by the add-on; overrides the MAC-derived ID so telemetry survives MAC randomization")
+	systemIDOverride := flag.String("system_id", "", "machine ID (15 digits) to report instead of the persisted or MAC-derived one")
 	flag.Parse()
 
-	if *systemIDOverride != "" {
-		if validSystemID(*systemIDOverride) {
-			SystemID = systemIDOverride
-		} else {
-			BKLog.Printf("Ignoring invalid --system_id %q, keeping MAC-derived ID", *systemIDOverride)
-		}
-	}
+	// The Client owns the machine ID: flag > persisted file > MAC-derived value
+	// from init(), which is persisted on first use. See resolveSystemID.
+	resolved := resolveSystemID(*systemIDOverride, *SystemID)
+	SystemID = &resolved
 
 	// A standalone Client is one a user started directly — no add-on passed its
 	// version. Standalone Clients are persistent apps: they get a system tray icon
@@ -361,6 +358,8 @@ func main() {
 	mux.HandleFunc("/"+vapi+"/report", reportHandler)
 	mux.HandleFunc("/report_event", ReportEventHandler)
 	mux.HandleFunc("/"+vapi+"/report_event", ReportEventHandler)
+	mux.HandleFunc("/report_usages", ReportUsagesHandler)
+	mux.HandleFunc("/"+vapi+"/report_usages", ReportUsagesHandler)
 	mux.HandleFunc("/shutdown", shutdownHandler)
 	mux.HandleFunc("/"+vapi+"/shutdown", shutdownHandler)
 	mux.HandleFunc("/debug", DebugNetworkHandler)
@@ -607,10 +606,16 @@ func shutdownHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// A wrapper around reportHandlerDo which actually does the heavylifting.
+// This wrapper is mocked in tests, so the SubscribeNewApp does not HTTP requests.
+func reportHandler(w http.ResponseWriter, r *http.Request) {
+	reportHandlerDo(w, r, SubscribeNewApp)
+}
+
 // Handles report for subscribed Blender add-ons.
 // Validates if the request contains required data and if the version of this Client
 // matches the Client version which add-on expects. If not the request is rejected.
-func reportHandler(w http.ResponseWriter, r *http.Request) {
+func reportHandlerDo(w http.ResponseWriter, r *http.Request, funcSubscribeNewApp func(MinimalTaskData)) {
 	lastReportAccessMux.Lock()
 	lastReportAccess = time.Now()
 	lastReportAccessMux.Unlock()
@@ -633,6 +638,7 @@ func reportHandler(w http.ResponseWriter, r *http.Request) {
 
 	if data.AddonVersion == "" { // Old versions of add-on does not send AddonVersion
 		BKLog.Printf("%v Add-on (probably v3.11 or less) requesting /report rejected.", EmoWarning)
+		BKLog.Printf("JSON: %v", data)
 		http.Error(w, "Unsupported add-on version. Use another Port and start older Client/Daemon there.", http.StatusForbidden) // 403
 		return
 	}
@@ -655,7 +661,7 @@ func reportHandler(w http.ResponseWriter, r *http.Request) {
 			BlenderVersion:  data.BlenderVersion,
 			PlatformVersion: data.PlatformVersion,
 		}
-		SubscribeNewApp(mData)
+		funcSubscribeNewApp(mData) // call SubscribeNewApp() in production, mock in test
 	}
 
 	taskID := uuid.New().String()
