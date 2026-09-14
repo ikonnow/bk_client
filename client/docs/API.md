@@ -2,7 +2,7 @@
 
 > Generated from `internal/apispec` by `cmd/apidocgen`. Do not edit by hand.
 
-**Client version:** `1.12.18`
+**Client version:** `1.12.19`
 
 The Client is a local HTTP server (default port **62485**) that bridges Blendkit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the Blendkit web service.
 
@@ -157,7 +157,7 @@ Primary polling endpoint for Blender add-ons. Subscribes the add-on on first cal
 
 #### `POST /report_event`
 
-Fire-and-forget telemetry (e.g. login funnel events). The Client forwards the event to the server with standard headers in the background; failures are only logged, never surfaced to the UI.
+Fire-and-forget telemetry (e.g. login funnel events). The Client forwards the event to the server with standard headers in the background; failures are only logged, never surfaced to the UI. Dropped when the shared setting `usage_data_opt_out` is true - everything on this route is optional by definition.
 
 - **Handler:** `ReportEventHandler`
 - **Versioned alias:** `/vX.Y/report_event`

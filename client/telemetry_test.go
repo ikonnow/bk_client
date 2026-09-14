@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/blenderkit/blenderkit/client/internal/settings"
 )
 
 func TestForwardEventPostsToServerWithHeaders(t *testing.T) {
@@ -88,5 +92,32 @@ func TestReportEventHandlerBadJSON(t *testing.T) {
 	ReportEventHandler(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d; want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestReportEventHandlerDropsEventsWhenOptedOut(t *testing.T) {
+	store, err := settings.Open(filepath.Join(t.TempDir(), "settings.json"), "test", settings.Shared{Server: "https://x.test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStore := SettingsStore
+	SettingsStore = store
+	t.Cleanup(func() { SettingsStore = oldStore })
+	if _, err := store.SetShared(settings.Shared{Server: "https://x.test", UsageDataOptOut: true}); err != nil {
+		t.Fatal(err)
+	}
+	posted := false
+	withFakeServer(t, func(w http.ResponseWriter, r *http.Request) { posted = true })
+
+	req := httptest.NewRequest(http.MethodPost, "/report_event", bytes.NewBufferString(`{"app_id":1,"event":"login_started","data":{}}`))
+	w := httptest.NewRecorder()
+	ReportEventHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d; want 200 (opt-out is not an error)", w.Code)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if posted {
+		t.Error("event forwarded to the server despite usage_data_opt_out")
 	}
 }

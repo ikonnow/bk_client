@@ -83,7 +83,7 @@ func Routes() []Route {
 		{
 			Path: "/report_event", Methods: []string{"POST"}, Versioned: true, Tag: "core",
 			Summary:     "Report a telemetry event",
-			Description: "Fire-and-forget telemetry (e.g. login funnel events). The Client forwards the event to the server with standard headers in the background; failures are only logged, never surfaced to the UI.",
+			Description: "Fire-and-forget telemetry (e.g. login funnel events). The Client forwards the event to the server with standard headers in the background; failures are only logged, never surfaced to the UI. Dropped when the shared setting `usage_data_opt_out` is true - everything on this route is optional by definition.",
 			Handler:     "ReportEventHandler", RequestType: "ReportEventData",
 		},
 		{
