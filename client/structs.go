@@ -261,9 +261,13 @@ type AssetFile struct {
 	URL      string `json:"url"`      // retrieved URL to the actual file
 	Filename string `json:"filename"` // filename of the file to be saved.
 
-	// FileType = "photo_thumbnail" or "thumbnail"
-	ThumbnailSmallURL  string `json:"thumbnailSmallUrl"`
-	ThumbnailMiddleURL string `json:"thumbnailMiddleUrl"`
+	ThumbnailSmallUrl               string `json:"thumbnailSmallUrl"`
+	ThumbnailSmallUrlWebp           string `json:"thumbnailSmallUrlWebp"`
+	ThumbnailMiddleUrl              string `json:"thumbnailMiddleUrl"`
+	ThumbnailMiddleUrlWebp          string `json:"thumbnailMiddleUrlWebp"`
+	ThumbnailLargeUrlNonsquared     string `json:"thumbnailLargeUrlNonsquared"`     // for HDRs
+	ThumbnailLargeUrlNonsquaredWebp string `json:"thumbnailLargeUrlNonsquaredWebp"` // for HDRs
+
 }
 
 type DownloadAssetData struct {

@@ -1161,3 +1161,841 @@ func BenchmarkReportHandler(b *testing.B) {
 	}
 	BKLog = log.New(os.Stdout, "⬡  ", log.LstdFlags|log.Lmicroseconds)
 }
+
+func Test_parseThumbnailsOnAsset(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for target function.
+		asset          Asset
+		index          int
+		appID          int
+		tempDir        string
+		addonVersion   string
+		blenderVersion *BlenderVersionStruct
+		want1          *Task
+		want2          *Task
+		want3          *Task
+		want4          *Task
+	}{
+		{ // https://www.blendkit.com/api/v1/assets/4f3f607d-4210-4b0a-bbaa-906b8e2a1fed/
+			name: "WebP available & supported",
+			asset: Asset{
+				AssetBaseID: "975dcf32-d010-4a9a-b093-4d6966175590",
+				DisplayName: "Triple wall hook",
+				AssetType:   "model",
+				//WebpGeneratedTimestamp: 1787831335,
+				Files: []AssetFile{
+					{
+						FileType:    "blend",
+						DownloadURL: "https://www.blendkit.com/api/v1/downloads/a3c2b935-a394-4b08-a867-260083418d2d/",
+					},
+					{
+						FileType:                        "thumbnail",
+						DownloadURL:                     "https://www.blendkit.com/api/v1/downloads/478d21f8-dad9-43c2-a99e-e9bbc474399f/",
+						ThumbnailSmallUrl:               "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg",
+						ThumbnailSmallUrlWebp:           "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg.webp?webp_generated=1766636291",
+						ThumbnailMiddleUrl:              "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg",
+						ThumbnailMiddleUrlWebp:          "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=1766636291",
+						ThumbnailLargeUrlNonsquared:     "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.1024x1024_q85.jpg",
+						ThumbnailLargeUrlNonsquaredWebp: "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.1024x1024_q85.jpg.webp?webp_generated=1766636291",
+					},
+				},
+			},
+			index:        1,
+			appID:        1111,
+			tempDir:      "/tmp/bk_client",
+			addonVersion: "5.2.2",
+			blenderVersion: &BlenderVersionStruct{
+				Major: 5,
+				Minor: 1,
+				Patch: 1,
+			},
+			want1: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "small",
+					ImagePath:     "/tmp/bk_client/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-%2C.jpg.webp",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg.webp?webp_generated=1766636291",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want2: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "full",
+					ImagePath:     "/tmp/bk_client/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-%2C.jpg.webp",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=1766636291",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want3: nil,
+			want4: nil,
+		},
+		{ // https://www.blendkit.com/api/v1/assets/4f3f607d-4210-4b0a-bbaa-906b8e2a1fed/
+			name: "WebP not available",
+			asset: Asset{
+				AssetBaseID: "975dcf32-d010-4a9a-b093-4d6966175590",
+				DisplayName: "Triple wall hook",
+				AssetType:   "model",
+				//WebpGeneratedTimestamp: 0,
+				Files: []AssetFile{
+					{
+						FileType:    "blend",
+						DownloadURL: "https://www.blendkit.com/api/v1/downloads/a3c2b935-a394-4b08-a867-260083418d2d/",
+					},
+					{
+						FileType:                        "thumbnail",
+						DownloadURL:                     "https://www.blendkit.com/api/v1/downloads/478d21f8-dad9-43c2-a99e-e9bbc474399f/",
+						ThumbnailSmallUrl:               "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg",
+						ThumbnailSmallUrlWebp:           "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg.webp?webp_generated=None",
+						ThumbnailMiddleUrl:              "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg",
+						ThumbnailMiddleUrlWebp:          "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=None",
+						ThumbnailLargeUrlNonsquared:     "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.1024x1024_q85.jpg",
+						ThumbnailLargeUrlNonsquaredWebp: "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.1024x1024_q85.jpg.webp?webp_generated=None",
+					},
+				},
+			},
+			index:        1,
+			appID:        1111,
+			tempDir:      "/tmp/bk_client",
+			addonVersion: "5.2.2",
+			blenderVersion: &BlenderVersionStruct{
+				Major: 5,
+				Minor: 1,
+				Patch: 1,
+			},
+			want1: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "small",
+					ImagePath:     "/tmp/bk_client/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-%2C.jpg",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want2: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "full",
+					ImagePath:     "/tmp/bk_client/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-%2C.jpg",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want3: nil,
+			want4: nil,
+		},
+		{ // https://www.blendkit.com/api/v1/assets/4f3f607d-4210-4b0a-bbaa-906b8e2a1fed/
+			name: "WebP not supported",
+			asset: Asset{
+				AssetBaseID: "975dcf32-d010-4a9a-b093-4d6966175590",
+				DisplayName: "Triple wall hook",
+				AssetType:   "model",
+				//WebpGeneratedTimestamp: 1766636291,
+				Files: []AssetFile{
+					{
+						FileType:    "blend",
+						DownloadURL: "https://www.blendkit.com/api/v1/downloads/a3c2b935-a394-4b08-a867-260083418d2d/",
+					},
+					{
+						FileType:                        "thumbnail",
+						DownloadURL:                     "https://www.blendkit.com/api/v1/downloads/478d21f8-dad9-43c2-a99e-e9bbc474399f/",
+						ThumbnailSmallUrl:               "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg",
+						ThumbnailSmallUrlWebp:           "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg.webp?webp_generated=1766636291",
+						ThumbnailMiddleUrl:              "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg",
+						ThumbnailMiddleUrlWebp:          "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=1766636291",
+						ThumbnailLargeUrlNonsquared:     "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.1024x1024_q85.jpg",
+						ThumbnailLargeUrlNonsquaredWebp: "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.1024x1024_q85.jpg.webp?webp_generated=1766636291",
+					},
+				},
+			},
+			index:        1,
+			appID:        1111,
+			tempDir:      "/tmp/bk_client",
+			addonVersion: "5.2.2",
+			blenderVersion: &BlenderVersionStruct{
+				Major: 3,
+				Minor: 0,
+				Patch: 1,
+			},
+			want1: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "small",
+					ImagePath:     "/tmp/bk_client/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-%2C.jpg",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want2: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "full",
+					ImagePath:     "/tmp/bk_client/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-%2C.jpg",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want3: nil,
+			want4: nil,
+		},
+		{ // https://www.blendkit.com/api/v1/assets/4f3f607d-4210-4b0a-bbaa-906b8e2a1fed/
+			name: "Photo & wire thumbs available in webp",
+			asset: Asset{
+				AssetBaseID: "975dcf32-d010-4a9a-b093-4d6966175590",
+				DisplayName: "Triple wall hook",
+				AssetType:   "model",
+				//WebpGeneratedTimestamp: 1766636291,
+				Files: []AssetFile{
+					{
+						FileType:    "blend",
+						DownloadURL: "https://www.blendkit.com/api/v1/downloads/a3c2b935-a394-4b08-a867-260083418d2d/",
+					},
+					{
+						FileType:               "thumbnail",
+						DownloadURL:            "https://www.blendkit.com/api/v1/downloads/478d21f8-dad9-43c2-a99e-e9bbc474399f/",
+						ThumbnailSmallUrl:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg",
+						ThumbnailSmallUrlWebp:  "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg.webp?webp_generated=1766636291",
+						ThumbnailMiddleUrl:     "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg",
+						ThumbnailMiddleUrlWebp: "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=1766636291",
+					},
+					{
+						FileType:               "photo_thumbnail",
+						DownloadURL:            "https://www.blendkit.com/api/v1/downloads/478d21f8-dad9-43c2-a99e-e9bbc474399f/",
+						ThumbnailMiddleUrl:     "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/photo_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg",
+						ThumbnailMiddleUrlWebp: "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/photo_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=1766636291",
+					},
+					{
+						FileType:               "wire_thumbnail",
+						DownloadURL:            "https://www.blendkit.com/api/v1/downloads/478d21f8-dad9-43c2-a99e-e9bbc474399f/",
+						ThumbnailMiddleUrl:     "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/wire_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg",
+						ThumbnailMiddleUrlWebp: "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/wire_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=1766636291",
+					},
+				},
+			},
+			index:        1,
+			appID:        1111,
+			tempDir:      "/tmp/bk_client",
+			addonVersion: "5.2.2",
+			blenderVersion: &BlenderVersionStruct{
+				Major: 5,
+				Minor: 1,
+				Patch: 1,
+			},
+			want1: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "small",
+					ImagePath:     "/tmp/bk_client/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-%2C.jpg.webp",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg.webp?webp_generated=1766636291",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want2: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "full",
+					ImagePath:     "/tmp/bk_client/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-%2C.jpg.webp",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=1766636291",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want3: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "photo_full",
+					ImagePath:     "/tmp/bk_client/photo_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-%2C.jpg.webp",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/photo_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=1766636291",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want4: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "wire_full",
+					ImagePath:     "/tmp/bk_client/wire_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-%2C.jpg.webp",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/wire_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=1766636291",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+		},
+		{ // https://www.blendkit.com/api/v1/assets/4f3f607d-4210-4b0a-bbaa-906b8e2a1fed/
+			name: "Photo & wire thumbs available without webp",
+			asset: Asset{
+				AssetBaseID: "975dcf32-d010-4a9a-b093-4d6966175590",
+				DisplayName: "Triple wall hook",
+				AssetType:   "model",
+				//WebpGeneratedTimestamp: 1766636291,
+				Files: []AssetFile{
+					{
+						FileType:    "blend",
+						DownloadURL: "https://www.blendkit.com/api/v1/downloads/a3c2b935-a394-4b08-a867-260083418d2d/",
+					},
+					{
+						FileType:               "thumbnail",
+						DownloadURL:            "https://www.blendkit.com/api/v1/downloads/478d21f8-dad9-43c2-a99e-e9bbc474399f/",
+						ThumbnailSmallUrl:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg",
+						ThumbnailSmallUrlWebp:  "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg.webp?webp_generated=None",
+						ThumbnailMiddleUrl:     "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg",
+						ThumbnailMiddleUrlWebp: "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=None",
+					},
+					{
+						FileType:               "photo_thumbnail",
+						DownloadURL:            "https://www.blendkit.com/api/v1/downloads/478d21f8-dad9-43c2-a99e-e9bbc474399f/",
+						ThumbnailMiddleUrl:     "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/photo_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg",
+						ThumbnailMiddleUrlWebp: "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/photo_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=None",
+					},
+					{
+						FileType:               "wire_thumbnail",
+						DownloadURL:            "https://www.blendkit.com/api/v1/downloads/478d21f8-dad9-43c2-a99e-e9bbc474399f/",
+						ThumbnailMiddleUrl:     "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/wire_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg",
+						ThumbnailMiddleUrlWebp: "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/wire_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg.webp?webp_generated=None",
+					},
+				},
+			},
+			index:        1,
+			appID:        1111,
+			tempDir:      "/tmp/bk_client",
+			addonVersion: "5.2.2",
+			blenderVersion: &BlenderVersionStruct{
+				Major: 5,
+				Minor: 1,
+				Patch: 1,
+			},
+			want1: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "small",
+					ImagePath:     "/tmp/bk_client/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-%2C.jpg",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.256x256_q85_crop-,.jpg",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want2: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "full",
+					ImagePath:     "/tmp/bk_client/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-%2C.jpg",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/thumbnail_e1016411-e8f6-4998-ae47-4b0801a4f210.jpg.512x512_q85_crop-,.jpg",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want3: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "photo_full",
+					ImagePath:     "/tmp/bk_client/photo_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-%2C.jpg",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/photo_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+			want4: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "wire_full",
+					ImagePath:     "/tmp/bk_client/wire_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-%2C.jpg",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/4f3f607d42104b0abbaa906b8e2a1fed/files/wire_thumbnail_39d3d601-c032-4215-b413-2b0bf3446dfe.jpg.512x512_q85_crop-,.jpg",
+					AssetBaseID:   "975dcf32-d010-4a9a-b093-4d6966175590",
+					Index:         5,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		// CHECK SMALL THUMB
+		if tt.want1 != nil {
+			got, _, _, _ := parseThumbnailsOnAsset(tt.asset, tt.index, tt.appID, tt.tempDir, tt.addonVersion, tt.blenderVersion)
+			want := tt.want1
+			t.Run(tt.name+"-small_thumb-task_basics", func(t *testing.T) {
+				if got.AppID != want.AppID {
+					t.Errorf("parseThumbnailsOnAsset() task.AppID = %v, want %v", got.AppID, want.AppID)
+				}
+				if got.TaskType != want.TaskType {
+					t.Errorf("parseThumbnailsOnAsset() task.TaskType = %v, want %v", got.TaskType, want.TaskType)
+				}
+			})
+
+			t.Run(tt.name+"-small_thumb-data_correct", func(t *testing.T) {
+				if got.Data.(DownloadThumbnailData).ThumbnailType != want.Data.(DownloadThumbnailData).ThumbnailType {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ThumbnailType = %v, want %v", got.Data.(DownloadThumbnailData).ThumbnailType, want.Data.(DownloadThumbnailData).ThumbnailType)
+				}
+				if got.Data.(DownloadThumbnailData).ImagePath != want.Data.(DownloadThumbnailData).ImagePath {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ImagePath = %v, want %v", got.Data.(DownloadThumbnailData).ImagePath, want.Data.(DownloadThumbnailData).ImagePath)
+				}
+				if got.Data.(DownloadThumbnailData).ImageURL != want.Data.(DownloadThumbnailData).ImageURL {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ImageURL = %v, want %v", got.Data.(DownloadThumbnailData).ImageURL, want.Data.(DownloadThumbnailData).ImageURL)
+				}
+			})
+		}
+
+		// CHECK FULL THUMB
+		if tt.want2 != nil {
+			_, got, _, _ := parseThumbnailsOnAsset(tt.asset, tt.index, tt.appID, tt.tempDir, tt.addonVersion, tt.blenderVersion)
+			want := tt.want2
+			t.Run(tt.name+"-full_thumb-task_basics", func(t *testing.T) {
+				if got.AppID != want.AppID {
+					t.Errorf("parseThumbnailsOnAsset() task.AppID = %v, want %v", got.AppID, want.AppID)
+				}
+				if got.TaskType != want.TaskType {
+					t.Errorf("parseThumbnailsOnAsset() task.TaskType = %v, want %v", got.TaskType, want.TaskType)
+				}
+			})
+			t.Run(tt.name+"-full_thumb-data_correct", func(t *testing.T) {
+				if got.Data.(DownloadThumbnailData).ThumbnailType != want.Data.(DownloadThumbnailData).ThumbnailType {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ThumbnailType = %v, want %v", got.Data.(DownloadThumbnailData).ThumbnailType, want.Data.(DownloadThumbnailData).ThumbnailType)
+				}
+				if got.Data.(DownloadThumbnailData).ImagePath != want.Data.(DownloadThumbnailData).ImagePath {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ImagePath = %v, want %v", got.Data.(DownloadThumbnailData).ImagePath, want.Data.(DownloadThumbnailData).ImagePath)
+				}
+				if got.Data.(DownloadThumbnailData).ImageURL != want.Data.(DownloadThumbnailData).ImageURL {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ImageURL = %v, want %v", got.Data.(DownloadThumbnailData).ImageURL, want.Data.(DownloadThumbnailData).ImageURL)
+				}
+			})
+		}
+
+		// CHECK PHOTO THUMBNAIL
+		if tt.want3 != nil {
+			_, _, got, _ := parseThumbnailsOnAsset(tt.asset, tt.index, tt.appID, tt.tempDir, tt.addonVersion, tt.blenderVersion)
+			want := tt.want3
+			t.Run(tt.name+"-full_photo-task_basics", func(t *testing.T) {
+				if got.AppID != want.AppID {
+					t.Errorf("parseThumbnailsOnAsset() task.AppID = %v, want %v", got.AppID, want.AppID)
+				}
+				if got.TaskType != want.TaskType {
+					t.Errorf("parseThumbnailsOnAsset() task.TaskType = %v, want %v", got.TaskType, want.TaskType)
+				}
+			})
+			t.Run(tt.name+"-full_photo-data_correct", func(t *testing.T) {
+				if got.Data.(DownloadThumbnailData).ThumbnailType != want.Data.(DownloadThumbnailData).ThumbnailType {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ThumbnailType = %v, want %v", got.Data.(DownloadThumbnailData).ThumbnailType, want.Data.(DownloadThumbnailData).ThumbnailType)
+				}
+				if got.Data.(DownloadThumbnailData).ImagePath != want.Data.(DownloadThumbnailData).ImagePath {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ImagePath = %v, want %v", got.Data.(DownloadThumbnailData).ImagePath, want.Data.(DownloadThumbnailData).ImagePath)
+				}
+				if got.Data.(DownloadThumbnailData).ImageURL != want.Data.(DownloadThumbnailData).ImageURL {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ImageURL = %v, want %v", got.Data.(DownloadThumbnailData).ImageURL, want.Data.(DownloadThumbnailData).ImageURL)
+				}
+			})
+		}
+
+		// CHECK WIREFRAME THUMBNAIL
+		if tt.want4 != nil {
+			_, _, _, got := parseThumbnailsOnAsset(tt.asset, tt.index, tt.appID, tt.tempDir, tt.addonVersion, tt.blenderVersion)
+			want := tt.want4
+			t.Run(tt.name+"-full_wite-task_basics", func(t *testing.T) {
+				if got.AppID != want.AppID {
+					t.Errorf("parseThumbnailsOnAsset() task.AppID = %v, want %v", got.AppID, want.AppID)
+				}
+				if got.TaskType != want.TaskType {
+					t.Errorf("parseThumbnailsOnAsset() task.TaskType = %v, want %v", got.TaskType, want.TaskType)
+				}
+			})
+			t.Run(tt.name+"-full_wire-data_correct", func(t *testing.T) {
+				if got.Data.(DownloadThumbnailData).ThumbnailType != want.Data.(DownloadThumbnailData).ThumbnailType {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ThumbnailType = %v, want %v", got.Data.(DownloadThumbnailData).ThumbnailType, want.Data.(DownloadThumbnailData).ThumbnailType)
+				}
+				if got.Data.(DownloadThumbnailData).ImagePath != want.Data.(DownloadThumbnailData).ImagePath {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ImagePath = %v, want %v", got.Data.(DownloadThumbnailData).ImagePath, want.Data.(DownloadThumbnailData).ImagePath)
+				}
+				if got.Data.(DownloadThumbnailData).ImageURL != want.Data.(DownloadThumbnailData).ImageURL {
+					t.Errorf("parseThumbnailsOnAsset() task.Data.ImageURL = %v, want %v", got.Data.(DownloadThumbnailData).ImageURL, want.Data.(DownloadThumbnailData).ImageURL)
+				}
+			})
+		}
+	}
+}
+
+func Test_isWebpSupported(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for target function.
+		asset          Asset
+		blenderVersion *BlenderVersionStruct
+		want           bool
+	}{
+		{
+			name: "Blender supports",
+			want: true,
+			blenderVersion: &BlenderVersionStruct{
+				Major: 5,
+				Minor: 1,
+				Patch: 1,
+			},
+		},
+		{
+			name: "Blender is old",
+			want: false,
+			blenderVersion: &BlenderVersionStruct{
+				Major: 3,
+				Minor: 3,
+				Patch: 1,
+			},
+		},
+		{
+			name: "Oldest Blender supporting webp",
+			want: true,
+			blenderVersion: &BlenderVersionStruct{
+				Major: 3,
+				Minor: 4,
+				Patch: 0,
+			},
+		},
+		{
+			name:           "blenderVersion is nil",
+			want:           false,
+			blenderVersion: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isWebpSupported(tt.blenderVersion)
+			if got != tt.want {
+				t.Errorf("isWebpSupported() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_getFullThumbnailURL(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for target function.
+		assetType string
+		assetFile AssetFile
+		useWebp   bool
+		want      string
+	}{
+		{
+			name:      "HDR webp supported & present",
+			want:      "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg.webp?webp_generated=1784732123",
+			useWebp:   true,
+			assetType: "hdr",
+			assetFile: AssetFile{
+				ThumbnailSmallUrl:               "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg",
+				ThumbnailMiddleUrl:              "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg",
+				ThumbnailLargeUrlNonsquared:     "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg",
+				ThumbnailSmallUrlWebp:           "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg.webp?webp_generated=1784732123",
+				ThumbnailMiddleUrlWebp:          "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg.webp?webp_generated=1784732123",
+				ThumbnailLargeUrlNonsquaredWebp: "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg.webp?webp_generated=1784732123",
+			},
+		},
+		{
+			name:      "HDR webp unsupported",
+			want:      "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg",
+			useWebp:   false,
+			assetType: "hdr",
+			assetFile: AssetFile{
+				ThumbnailSmallUrl:               "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg",
+				ThumbnailMiddleUrl:              "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg",
+				ThumbnailLargeUrlNonsquared:     "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg",
+				ThumbnailSmallUrlWebp:           "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg.webp?webp_generated=1784732123",
+				ThumbnailMiddleUrlWebp:          "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg.webp?webp_generated=1784732123",
+				ThumbnailLargeUrlNonsquaredWebp: "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg.webp?webp_generated=1784732123",
+			},
+		},
+		{
+			name:      "HDR webp not present",
+			want:      "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg",
+			useWebp:   true,
+			assetType: "hdr",
+			assetFile: AssetFile{
+				ThumbnailSmallUrl:               "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg",
+				ThumbnailMiddleUrl:              "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg",
+				ThumbnailLargeUrlNonsquared:     "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg",
+				ThumbnailSmallUrlWebp:           "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg.webp?webp_generated=None",
+				ThumbnailMiddleUrlWebp:          "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg.webp?webp_generated=None",
+				ThumbnailLargeUrlNonsquaredWebp: "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg.webp?webp_generated=None",
+			},
+		},
+		{
+			name:      "Model webp supported & present",
+			want:      "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg.webp?webp_generated=1784732123",
+			useWebp:   true,
+			assetType: "model",
+			assetFile: AssetFile{
+				ThumbnailSmallUrl:               "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg",
+				ThumbnailMiddleUrl:              "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg",
+				ThumbnailLargeUrlNonsquared:     "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg",
+				ThumbnailSmallUrlWebp:           "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg.webp?webp_generated=1784732123",
+				ThumbnailMiddleUrlWebp:          "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg.webp?webp_generated=1784732123",
+				ThumbnailLargeUrlNonsquaredWebp: "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg.webp?webp_generated=1784732123",
+			},
+		},
+		{
+			name:      "Printable webp not supported",
+			want:      "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg",
+			useWebp:   false,
+			assetType: "printable",
+			assetFile: AssetFile{
+				ThumbnailSmallUrl:               "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg",
+				ThumbnailMiddleUrl:              "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg",
+				ThumbnailLargeUrlNonsquared:     "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg",
+				ThumbnailSmallUrlWebp:           "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg.webp?webp_generated=1784732123",
+				ThumbnailMiddleUrlWebp:          "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg.webp?webp_generated=1784732123",
+				ThumbnailLargeUrlNonsquaredWebp: "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg.webp?webp_generated=1784732123",
+			},
+		},
+		{
+			name:      "Material webp not present",
+			want:      "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg",
+			useWebp:   true,
+			assetType: "material",
+			assetFile: AssetFile{
+				ThumbnailSmallUrl:               "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg",
+				ThumbnailMiddleUrl:              "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg",
+				ThumbnailLargeUrlNonsquared:     "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg",
+				ThumbnailSmallUrlWebp:           "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.256x256_q85_crop-%2C.jpg.webp?webp_generated=None",
+				ThumbnailMiddleUrlWebp:          "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.512x512_q85_crop-%2C.jpg.webp?webp_generated=None",
+				ThumbnailLargeUrlNonsquaredWebp: "https://public.blenderkit.com/thumbnails/assets/7fed2ece1a9a4fdeba4d6cc2ea1f749e/files/thumbnail_4a697c7d-5a7a-4625-bb96-4282ca6890fc.jpg.1024x1024_q85.jpg.webp?webp_generated=None",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getFullThumbnailURL(tt.assetFile, tt.assetType, tt.useWebp)
+
+			if got != tt.want {
+				t.Errorf("getFullThumbnailURL() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_createThumbnailDownloadTask(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for target function.
+		assetBaseId      string
+		assetDisplayName string
+		index            int
+		thumbnailUrl     string
+		thumbnailType    string
+		appId            int
+		addonVersion     string
+		tempDir          string
+		want             *Task
+	}{
+		{ // https://www.blendkit.com/api/v1/assets/c2973368-9754-4b63-8e37-2c655de7fe4a/
+			name:             "Small PNG",
+			assetBaseId:      "839f9e10-4a5a-4831-a4cd-638911339c83",
+			assetDisplayName: "Kittenrial",
+			index:            1,
+			thumbnailUrl:     "https://public.blenderkit.com/thumbnails/assets/c297336897544b638e372c655de7fe4a/files/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.256x256_q85_crop-,.png",
+			thumbnailType:    "small",
+			appId:            1111,
+			addonVersion:     "3.21.1",
+			tempDir:          "/tmp/blendkit/assets",
+			want: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.1",
+					ThumbnailType: "small",
+					ImagePath:     "/tmp/blendkit/assets/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.256x256_q85_crop-%2C.png",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/c297336897544b638e372c655de7fe4a/files/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.256x256_q85_crop-,.png",
+					AssetBaseID:   "839f9e10-4a5a-4831-a4cd-638911339c83",
+					Index:         1,
+				},
+				AppID:    1111,
+				TaskType: "thumbnail_download",
+				Error:    nil,
+			},
+		},
+		{
+			name:             "Small webp",
+			assetBaseId:      "839f9e10-4a5a-4831-a4cd-638911339c83",
+			assetDisplayName: "Kittenrial",
+			index:            2,
+			thumbnailUrl:     "https://public.blenderkit.com/thumbnails/assets/c297336897544b638e372c655de7fe4a/files/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.256x256_q85_crop-,.png.webp?webp_generated=1766466225",
+			thumbnailType:    "small",
+			appId:            2222,
+			addonVersion:     "3.21.2",
+			tempDir:          "/tmp/blendkit/assets",
+			want: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.2",
+					ThumbnailType: "small",
+					ImagePath:     "/tmp/blendkit/assets/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.256x256_q85_crop-%2C.png.webp",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/c297336897544b638e372c655de7fe4a/files/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.256x256_q85_crop-,.png.webp?webp_generated=1766466225",
+					AssetBaseID:   "839f9e10-4a5a-4831-a4cd-638911339c83",
+					Index:         2,
+				},
+				AppID:    2222,
+				TaskType: "thumbnail_download",
+				Error:    nil,
+			},
+		},
+		{
+			name:             "Full png",
+			assetBaseId:      "839f9e10-4a5a-4831-a4cd-638911339c83",
+			assetDisplayName: "Kittenrial",
+			index:            3,
+			thumbnailUrl:     "https://public.blenderkit.com/thumbnails/assets/c297336897544b638e372c655de7fe4a/files/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.1024x1024_q85_crop-,.png",
+			thumbnailType:    "full",
+			appId:            3333,
+			addonVersion:     "3.21.3",
+			tempDir:          "/tmp/blendkit/assets",
+			want: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.3",
+					ThumbnailType: "full",
+					ImagePath:     "/tmp/blendkit/assets/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.1024x1024_q85_crop-%2C.png",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/c297336897544b638e372c655de7fe4a/files/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.1024x1024_q85_crop-,.png",
+					AssetBaseID:   "839f9e10-4a5a-4831-a4cd-638911339c83",
+					Index:         3,
+				},
+				AppID:    3333,
+				TaskType: "thumbnail_download",
+				Error:    nil,
+			},
+		},
+		{
+			name:             "Full webp",
+			assetBaseId:      "839f9e10-4a5a-4831-a4cd-638911339c83",
+			assetDisplayName: "Kittenrial",
+			index:            4,
+			thumbnailUrl:     "https://public.blenderkit.com/thumbnails/assets/c297336897544b638e372c655de7fe4a/files/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.1024x1024_q85_crop-,.png.webp?webp_generated=1766466225",
+			thumbnailType:    "full",
+			appId:            4444,
+			addonVersion:     "3.21.4",
+			tempDir:          "/tmp/blendkit/assets",
+			want: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.4",
+					ThumbnailType: "full",
+					ImagePath:     "/tmp/blendkit/assets/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.1024x1024_q85_crop-%2C.png.webp",
+					ImageURL:      "https://public.blenderkit.com/thumbnails/assets/c297336897544b638e372c655de7fe4a/files/thumbnail_20e8d297-9f3b-4073-b6a7-5cd8348518a5.png.1024x1024_q85_crop-,.png.webp?webp_generated=1766466225",
+					AssetBaseID:   "839f9e10-4a5a-4831-a4cd-638911339c83",
+					Index:         4,
+				},
+				AppID:    4444,
+				TaskType: "thumbnail_download",
+				Error:    nil,
+			},
+		},
+		{
+			name:             "ExtractFilenameFromURL error is propagated to task error",
+			assetBaseId:      "839f9e10-4a5a-4831-a4cd-638911339c83",
+			assetDisplayName: "Kittenrial",
+			index:            5,
+			thumbnailUrl:     "", // Empty URL so we expect underlying ExtractFilenameFromURL() to fail
+			thumbnailType:    "full",
+			appId:            5555,
+			addonVersion:     "3.21.5",
+			tempDir:          "/tmp/blendkit/assets",
+			want: &Task{
+				Data: DownloadThumbnailData{
+					AddonVersion:  "3.21.5",
+					ThumbnailType: "full",
+					ImagePath:     "/tmp/blendkit/assets",
+					ImageURL:      "",
+					AssetBaseID:   "839f9e10-4a5a-4831-a4cd-638911339c83",
+					Index:         5,
+				},
+				AppID:    5555,
+				TaskType: "thumbnail_download",
+				Error:    fmt.Errorf("error extracting filename from URL: empty URL for asset Kittenrial"),
+			},
+		},
+		{
+			name:             "Unsupported thumbnailType is rejected",
+			assetBaseId:      "839f9e10-4a5a-4831-a4cd-638911339c83",
+			assetDisplayName: "Kittenrial",
+			index:            6,
+			thumbnailUrl:     "", // Empty URL so we expect underlying ExtractFilenameFromURL() to fail
+			thumbnailType:    "photo_small",
+			appId:            6666,
+			addonVersion:     "3.21.6",
+			tempDir:          "/tmp/blendkit/assets",
+			want:             nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := createThumbnailDownloadTask(tt.assetBaseId, tt.assetDisplayName, tt.index, tt.thumbnailUrl, tt.thumbnailType, tt.appId, tt.addonVersion, tt.tempDir)
+
+			if tt.want == nil {
+				if got != tt.want {
+					t.Errorf("createThumbnailDownloadTask()->task = %v, want %v", got, tt.want)
+				}
+				return
+			}
+
+			if got.AppID != tt.want.AppID {
+				t.Errorf("createThumbnailDownloadTask()->task.AppID = %v, want %v", got.AppID, tt.want.AppID)
+			}
+			if got.TaskType != tt.want.TaskType {
+				t.Errorf("createThumbnailDownloadTask()->task.TaskType = %v, want %v", got.TaskType, tt.want.TaskType)
+			}
+			if tt.want.Error != nil {
+				if got.Error.Error() != tt.want.Error.Error() {
+					t.Errorf("createThumbnailDownloadTask()->task.Error = %v, want %v", got.Error, tt.want.Error)
+				}
+			} else {
+				if got.Error != nil {
+					t.Errorf("createThumbnailDownloadTask()->task.Error = %v, want %v", got.Error, tt.want.Error)
+				}
+			}
+
+			// TEST TASK.DATA
+			if got.Data.(DownloadThumbnailData).AddonVersion != tt.want.Data.(DownloadThumbnailData).AddonVersion {
+				t.Errorf("createThumbnailDownloadTask()->task.Data.AddonVersion = %v, want %v", got.Data.(DownloadThumbnailData).AddonVersion, tt.want.Data.(DownloadThumbnailData).AddonVersion)
+			}
+			if got.Data.(DownloadThumbnailData).ThumbnailType != tt.want.Data.(DownloadThumbnailData).ThumbnailType {
+				t.Errorf("createThumbnailDownloadTask()->task.Data.ThumbnailType = %v, want %v", got.Data.(DownloadThumbnailData).ThumbnailType, tt.want.Data.(DownloadThumbnailData).ThumbnailType)
+			}
+			if got.Data.(DownloadThumbnailData).ImagePath != tt.want.Data.(DownloadThumbnailData).ImagePath {
+				t.Errorf("createThumbnailDownloadTask()->task.Data.ImagePath = %v, want %v", got.Data.(DownloadThumbnailData).ImagePath, tt.want.Data.(DownloadThumbnailData).ImagePath)
+			}
+			if got.Data.(DownloadThumbnailData).ImageURL != tt.want.Data.(DownloadThumbnailData).ImageURL {
+				t.Errorf("createThumbnailDownloadTask()->task.Data.ImageURL = %v, want %v", got.Data.(DownloadThumbnailData).ImageURL, tt.want.Data.(DownloadThumbnailData).ImageURL)
+			}
+			if got.Data.(DownloadThumbnailData).AssetBaseID != tt.want.Data.(DownloadThumbnailData).AssetBaseID {
+				t.Errorf("createThumbnailDownloadTask()->task.Data.AssetBaseID = %v, want %v", got.Data.(DownloadThumbnailData).AssetBaseID, tt.want.Data.(DownloadThumbnailData).AssetBaseID)
+			}
+			if got.Data.(DownloadThumbnailData).Index != tt.want.Data.(DownloadThumbnailData).Index {
+				t.Errorf("createThumbnailDownloadTask()->task.Data.Index = %v, want %v", got.Data.(DownloadThumbnailData).Index, tt.want.Data.(DownloadThumbnailData).Index)
+			}
+		})
+	}
+}
