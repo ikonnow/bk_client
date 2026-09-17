@@ -1058,10 +1058,22 @@ func isWebpSupported(blenderVersion *BlenderVersionStruct) bool {
 	return true
 }
 
+func isWebpThumbnailAvailable(webpURL string) bool {
+	if strings.TrimSpace(webpURL) == "" {
+		return false
+	}
+	parsedURL, err := url.Parse(webpURL)
+	if err != nil || parsedURL.Path == "" {
+		return false
+	}
+	generated := strings.ToLower(strings.TrimSpace(parsedURL.Query().Get("webp_generated")))
+	return generated != "" && generated != "none" && generated != "0"
+}
+
 // Get small thumbnail URL, these pictures are used in the search bar.
 // Return .webp if supported and available.
 func getSmallThumbnailURL(af AssetFile, webpSupported bool) string {
-	webpAvailable := !strings.HasSuffix(af.ThumbnailSmallUrlWebp, "=None")
+	webpAvailable := isWebpThumbnailAvailable(af.ThumbnailSmallUrlWebp)
 	if webpSupported && webpAvailable {
 		return af.ThumbnailSmallUrlWebp
 	}
@@ -1073,14 +1085,14 @@ func getSmallThumbnailURL(af AssetFile, webpSupported bool) string {
 // Return .webp if supported and available.
 func getFullThumbnailURL(af AssetFile, assetType string, webpSupported bool) string {
 	if assetType == "hdr" {
-		webpAvailable := !strings.HasSuffix(af.ThumbnailLargeUrlNonsquaredWebp, "=None")
+		webpAvailable := isWebpThumbnailAvailable(af.ThumbnailLargeUrlNonsquaredWebp)
 		if webpSupported && webpAvailable {
 			return af.ThumbnailLargeUrlNonsquaredWebp
 		}
 		return af.ThumbnailLargeUrlNonsquared
 	}
 
-	webpAvailable := !strings.HasSuffix(af.ThumbnailMiddleUrlWebp, "=None")
+	webpAvailable := isWebpThumbnailAvailable(af.ThumbnailMiddleUrlWebp)
 	if webpSupported && webpAvailable {
 		return af.ThumbnailMiddleUrlWebp
 	}
@@ -1088,7 +1100,7 @@ func getFullThumbnailURL(af AssetFile, assetType string, webpSupported bool) str
 }
 
 func getPhotoThumbnailURL(af AssetFile, webpSupported bool) string {
-	webpAvailable := !strings.HasSuffix(af.ThumbnailMiddleUrlWebp, "=None")
+	webpAvailable := isWebpThumbnailAvailable(af.ThumbnailMiddleUrlWebp)
 	if webpSupported && webpAvailable {
 		return af.ThumbnailMiddleUrlWebp
 	}
@@ -1096,7 +1108,7 @@ func getPhotoThumbnailURL(af AssetFile, webpSupported bool) string {
 }
 
 func getWireThumbnailURL(af AssetFile, webpSupported bool) string {
-	webpAvailable := !strings.HasSuffix(af.ThumbnailMiddleUrlWebp, "=None")
+	webpAvailable := isWebpThumbnailAvailable(af.ThumbnailMiddleUrlWebp)
 	if webpSupported && webpAvailable {
 		return af.ThumbnailMiddleUrlWebp
 	}
@@ -1133,6 +1145,82 @@ func createThumbnailDownloadTask(assetBaseId string, assetDisplayName string, in
 	return thumbnailTask
 }
 
+func addThumbnailFallback(task *Task, fallbackURL string, tempDir string) {
+	if task == nil || strings.TrimSpace(fallbackURL) == "" {
+		return
+	}
+	data, ok := task.Data.(DownloadThumbnailData)
+	if !ok || data.ImageURL == fallbackURL {
+		return
+	}
+	fallbackName, err := ExtractFilenameFromURL(fallbackURL)
+	if err != nil {
+		BKLog.Printf("addThumbnailFallback(): error extracting fallback filename from URL: %v", err)
+		return
+	}
+	data.FallbackImageURL = fallbackURL
+	data.FallbackImagePath = filepath.Join(tempDir, fallbackName)
+	task.Data = data
+}
+
+func assetThumbnailFile(asset Asset) AssetFile {
+	return AssetFile{
+		ThumbnailSmallUrl:               asset.ThumbnailSmallURL,
+		ThumbnailSmallUrlWebp:           asset.ThumbnailSmallURLWebp,
+		ThumbnailMiddleUrl:              asset.ThumbnailMiddleURL,
+		ThumbnailMiddleUrlWebp:          asset.ThumbnailMiddleURLWebp,
+		ThumbnailLargeUrlNonsquared:     asset.ThumbnailLargeURLNonsquared,
+		ThumbnailLargeUrlNonsquaredWebp: asset.ThumbnailLargeURLNonsquaredWebp,
+	}
+}
+
+func hasAssetThumbnailURLs(asset Asset) bool {
+	thumbnailFile := assetThumbnailFile(asset)
+	return thumbnailFile.ThumbnailSmallUrl != "" ||
+		thumbnailFile.ThumbnailSmallUrlWebp != "" ||
+		thumbnailFile.ThumbnailMiddleUrl != "" ||
+		thumbnailFile.ThumbnailMiddleUrlWebp != "" ||
+		thumbnailFile.ThumbnailLargeUrlNonsquared != "" ||
+		thumbnailFile.ThumbnailLargeUrlNonsquaredWebp != ""
+}
+
+func createPrimaryThumbnailTasks(asset Asset, thumbnailFile AssetFile, index int, appID int, tempDir, addonVersion string, useWebp bool) (*Task, *Task) {
+	var smallThumbnailTask *Task
+	var fullThumbnailTask *Task
+	smallThumbURL := getSmallThumbnailURL(thumbnailFile, useWebp)
+	if strings.TrimSpace(smallThumbURL) != "" {
+		smallThumbnailTask = createThumbnailDownloadTask(
+			asset.AssetBaseID,
+			asset.DisplayName,
+			index,
+			smallThumbURL,
+			"small",
+			appID,
+			addonVersion,
+			tempDir)
+		addThumbnailFallback(smallThumbnailTask, thumbnailFile.ThumbnailSmallUrl, tempDir)
+	}
+
+	fullThumbURL := getFullThumbnailURL(thumbnailFile, asset.AssetType, useWebp)
+	if strings.TrimSpace(fullThumbURL) != "" {
+		fullThumbnailTask = createThumbnailDownloadTask(
+			asset.AssetBaseID,
+			asset.DisplayName,
+			index,
+			fullThumbURL,
+			"full",
+			appID,
+			addonVersion,
+			tempDir)
+		fullFallbackURL := thumbnailFile.ThumbnailMiddleUrl
+		if asset.AssetType == "hdr" {
+			fullFallbackURL = thumbnailFile.ThumbnailLargeUrlNonsquared
+		}
+		addThumbnailFallback(fullThumbnailTask, fullFallbackURL, tempDir)
+	}
+	return smallThumbnailTask, fullThumbnailTask
+}
+
 // Parse thumbnails on single asset.
 func parseThumbnailsOnAsset(asset Asset, index int, appID int, tempDir, addonVersion string, blenderVersion *BlenderVersionStruct) (*Task, *Task, *Task, *Task) {
 	var smallThumbnailTask *Task
@@ -1140,35 +1228,26 @@ func parseThumbnailsOnAsset(asset Asset, index int, appID int, tempDir, addonVer
 	var fullPhotoTask *Task
 	var fullWireTask *Task
 	useWebp := isWebpSupported(blenderVersion)
+	if hasAssetThumbnailURLs(asset) {
+		smallThumbnailTask, fullThumbnailTask = createPrimaryThumbnailTasks(asset, assetThumbnailFile(asset), index, appID, tempDir, addonVersion, useWebp)
+	}
 	for _, assetFile := range asset.Files {
 		var thumbnailType string
 		switch assetFile.FileType {
 		case "thumbnail": // We download thumbnail in 2 sizes...
-			if fullPhotoTask != nil {
+			if smallThumbnailTask != nil && fullThumbnailTask != nil {
+				continue
+			}
+			if smallThumbnailTask != nil || fullThumbnailTask != nil {
 				BKLog.Printf("%s Asset has %s (%s) more than one thumbnail file", EmoUfo, asset.Name, asset.URL)
 			}
-			// SMALL THUMBNAIL
-			smallThumbURL := getSmallThumbnailURL(assetFile, useWebp)
-			smallThumbnailTask = createThumbnailDownloadTask(
-				asset.AssetBaseID,
-				asset.DisplayName,
-				index,
-				smallThumbURL,
-				"small",
-				appID,
-				addonVersion,
-				tempDir)
-			// FULL THUMBNAIL
-			fullThumbURL := getFullThumbnailURL(assetFile, asset.AssetType, useWebp)
-			fullThumbnailTask = createThumbnailDownloadTask(
-				asset.AssetBaseID,
-				asset.DisplayName,
-				index,
-				fullThumbURL,
-				"full",
-				appID,
-				addonVersion,
-				tempDir)
+			createdSmallTask, createdFullTask := createPrimaryThumbnailTasks(asset, assetFile, index, appID, tempDir, addonVersion, useWebp)
+			if smallThumbnailTask == nil {
+				smallThumbnailTask = createdSmallTask
+			}
+			if fullThumbnailTask == nil {
+				fullThumbnailTask = createdFullTask
+			}
 		case "photo_thumbnail":
 			if fullPhotoTask != nil {
 				BKLog.Printf("%s Asset has %s (%s) more than one photo_thumbnail file", EmoUfo, asset.Name, asset.URL)
@@ -1184,6 +1263,7 @@ func parseThumbnailsOnAsset(asset Asset, index int, appID int, tempDir, addonVer
 				appID,
 				addonVersion,
 				tempDir)
+			addThumbnailFallback(fullPhotoTask, assetFile.ThumbnailMiddleUrl, tempDir)
 		case "wire_thumbnail":
 			if fullWireTask != nil {
 				BKLog.Printf("%s Asset has %s (%s) more than one wire_thumbnail file", EmoUfo, asset.Name, asset.URL)
@@ -1199,6 +1279,7 @@ func parseThumbnailsOnAsset(asset Asset, index int, appID int, tempDir, addonVer
 				appID,
 				addonVersion,
 				tempDir)
+			addThumbnailFallback(fullWireTask, assetFile.ThumbnailMiddleUrl, tempDir)
 		default: //skip blend, prxc...
 			continue
 		}
@@ -1291,34 +1372,64 @@ func DownloadThumbnail(t *Task, wg *sync.WaitGroup) {
 		return
 	}
 
-	req, err := http.NewRequest("GET", data.ImageURL, nil)
-	if err != nil {
-		t.Status = "error"
-		t.Error = err
-		AddTaskCh <- t
-		return
+	resp, err := downloadThumbnailResponse(data.ImageURL, data, t.AppID)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		primaryErr := err
+		primaryStatus := ""
+		primaryMessage := ""
+		if resp != nil {
+			primaryStatus = resp.Status
+			_, primaryMessage, _ = ParseFailedHTTPResponse(resp)
+			resp.Body.Close()
+		}
+		if data.FallbackImageURL == "" || data.FallbackImagePath == "" {
+			t.Message = fmt.Sprintf("thumbnail: %s, status (%s), error (%v), url: %v", primaryMessage, primaryStatus, primaryErr, data.ImageURL)
+			t.Status = "error"
+			AddTaskCh <- t
+			return
+		}
+		if _, statErr := os.Stat(data.FallbackImagePath); statErr == nil {
+			data.ImageURL = data.FallbackImageURL
+			data.ImagePath = data.FallbackImagePath
+			t.Data = data
+			t.Status = "finished"
+			t.Message = "fallback thumbnail on disk"
+			AddTaskCh <- t
+			return
+		}
+
+		fallbackResp, fallbackErr := downloadThumbnailResponse(data.FallbackImageURL, data, t.AppID)
+		if fallbackErr != nil || fallbackResp.StatusCode != http.StatusOK {
+			if fallbackResp != nil {
+				fallbackResp.Body.Close()
+			}
+			t.Message = fmt.Sprintf("thumbnail primary failed (%s, %v), fallback failed (%v), url: %v", primaryStatus, primaryErr, fallbackErr, data.ImageURL)
+			t.Status = "error"
+			AddTaskCh <- t
+			return
+		}
+		data.ImageURL = data.FallbackImageURL
+		data.ImagePath = data.FallbackImagePath
+		t.Data = data
+		resp = fallbackResp
 	}
 
-	headers := getHeaders("", *SystemID, data.AddonVersion, data.PlatformVersion, t.AppID)
+	writeThumbnailResponse(t, resp, data)
+}
+
+func downloadThumbnailResponse(imageURL string, data DownloadThumbnailData, appID int) (*http.Response, error) {
+	req, err := http.NewRequest("GET", imageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	headers := getHeaders("", *SystemID, data.AddonVersion, data.PlatformVersion, appID)
 	req.Header = headers
-	resp, err := ClientBigThumbs.Do(req)
-	if err != nil {
-		t.Message = "Error performing request to download thumbnail"
-		t.Status = "error"
-		t.Error = err
-		AddTaskCh <- t
-		return
-	}
-	defer resp.Body.Close()
-	//MARK: TODO check status code
-	if resp.StatusCode != http.StatusOK {
-		_, respString, _ := ParseFailedHTTPResponse(resp)
-		t.Message = fmt.Sprintf("search: %s, status (%s), url: %v", respString, resp.Status, data.ImageURL)
-		t.Status = "error"
-		AddTaskCh <- t
-		return
-	}
+	return ClientBigThumbs.Do(req)
+}
 
+func writeThumbnailResponse(t *Task, resp *http.Response, data DownloadThumbnailData) {
+	defer resp.Body.Close()
 	// Open the file for writing
 	file, err := os.Create(data.ImagePath)
 	if err != nil {
