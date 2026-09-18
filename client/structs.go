@@ -681,13 +681,15 @@ type DisclaimerData struct {
 }
 
 type DownloadThumbnailData struct {
-	AddonVersion    string `json:"addon_version"`
-	PlatformVersion string `json:"platform_version"`
-	ThumbnailType   string `json:"thumbnail_type"`
-	ImagePath       string `json:"image_path"`
-	ImageURL        string `json:"image_url"`
-	AssetBaseID     string `json:"assetBaseId"`
-	Index           int    `json:"index"`
+	AddonVersion      string `json:"addon_version"`
+	PlatformVersion   string `json:"platform_version"`
+	ThumbnailType     string `json:"thumbnail_type"`
+	ImagePath         string `json:"image_path"`
+	ImageURL          string `json:"image_url"`
+	FallbackImagePath string `json:"fallback_image_path,omitempty"`
+	FallbackImageURL  string `json:"fallback_image_url,omitempty"`
+	AssetBaseID       string `json:"assetBaseId"`
+	Index             int    `json:"index"`
 }
 
 // DownloadPrxcData holds info needed to download a .prxc proxy mesh file.

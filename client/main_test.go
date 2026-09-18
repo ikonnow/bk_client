@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -1647,6 +1648,129 @@ func Test_parseThumbnailsOnAsset(t *testing.T) {
 	}
 }
 
+func Test_isWebpThumbnailAvailable(t *testing.T) {
+	tests := []struct {
+		name    string
+		webpURL string
+		want    bool
+	}{
+		{
+			name:    "generated timestamp",
+			webpURL: "https://public.blendkit.com/thumbnails/assets/a/files/thumb.jpg.webp?webp_generated=1766636291",
+			want:    true,
+		},
+		{
+			name:    "empty url",
+			webpURL: "",
+			want:    false,
+		},
+		{
+			name:    "none timestamp",
+			webpURL: "https://public.blendkit.com/thumbnails/assets/a/files/thumb.jpg.webp?webp_generated=None",
+			want:    false,
+		},
+		{
+			name:    "zero timestamp",
+			webpURL: "https://public.blendkit.com/thumbnails/assets/a/files/thumb.jpg.webp?webp_generated=0",
+			want:    false,
+		},
+		{
+			name:    "missing timestamp",
+			webpURL: "https://public.blendkit.com/thumbnails/assets/a/files/thumb.jpg.webp",
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isWebpThumbnailAvailable(tt.webpURL); got != tt.want {
+				t.Errorf("isWebpThumbnailAvailable() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_getThumbnailURLsFallbackWhenWebpUnavailable(t *testing.T) {
+	assetFile := AssetFile{
+		ThumbnailSmallUrl:               "https://public.blendkit.com/thumbnails/assets/a/files/thumb.jpg.256x256_q85_crop-%2C.jpg",
+		ThumbnailMiddleUrl:              "https://public.blendkit.com/thumbnails/assets/a/files/thumb.jpg.512x512_q85_crop-%2C.jpg",
+		ThumbnailLargeUrlNonsquared:     "https://public.blendkit.com/thumbnails/assets/a/files/thumb.jpg.1024x1024_q85.jpg",
+		ThumbnailSmallUrlWebp:           "",
+		ThumbnailMiddleUrlWebp:          "https://public.blendkit.com/thumbnails/assets/a/files/thumb.jpg.512x512_q85_crop-%2C.jpg.webp?webp_generated=0",
+		ThumbnailLargeUrlNonsquaredWebp: "https://public.blendkit.com/thumbnails/assets/a/files/thumb.jpg.1024x1024_q85.jpg.webp?webp_generated=None",
+	}
+
+	if got := getSmallThumbnailURL(assetFile, true); got != assetFile.ThumbnailSmallUrl {
+		t.Errorf("getSmallThumbnailURL() = %v, want %v", got, assetFile.ThumbnailSmallUrl)
+	}
+	if got := getFullThumbnailURL(assetFile, "model", true); got != assetFile.ThumbnailMiddleUrl {
+		t.Errorf("getFullThumbnailURL(model) = %v, want %v", got, assetFile.ThumbnailMiddleUrl)
+	}
+	if got := getFullThumbnailURL(assetFile, "hdr", true); got != assetFile.ThumbnailLargeUrlNonsquared {
+		t.Errorf("getFullThumbnailURL(hdr) = %v, want %v", got, assetFile.ThumbnailLargeUrlNonsquared)
+	}
+	if got := getPhotoThumbnailURL(assetFile, true); got != assetFile.ThumbnailMiddleUrl {
+		t.Errorf("getPhotoThumbnailURL() = %v, want %v", got, assetFile.ThumbnailMiddleUrl)
+	}
+	if got := getWireThumbnailURL(assetFile, true); got != assetFile.ThumbnailMiddleUrl {
+		t.Errorf("getWireThumbnailURL() = %v, want %v", got, assetFile.ThumbnailMiddleUrl)
+	}
+}
+
+func Test_parseThumbnailsOnAssetPrefersAssetLevelThumbnailURLs(t *testing.T) {
+	asset := Asset{
+		AssetBaseID:            "asset-id",
+		DisplayName:            "Asset with repeated thumbnails",
+		AssetType:              "addon",
+		ThumbnailSmallURL:      "https://public.blendkit.com/thumbnails/assets/a/files/top-small.jpg",
+		ThumbnailSmallURLWebp:  "https://public.blendkit.com/thumbnails/assets/a/files/top-small.jpg.webp?webp_generated=1789670237",
+		ThumbnailMiddleURL:     "https://public.blendkit.com/thumbnails/assets/a/files/top-middle.jpg",
+		ThumbnailMiddleURLWebp: "https://public.blendkit.com/thumbnails/assets/a/files/top-middle.jpg.webp?webp_generated=1789670237",
+		ThumbnailLargeURLWebp:  "https://public.blendkit.com/thumbnails/assets/a/files/top-large.jpg.webp?webp_generated=1789670237",
+		ThumbnailLargeURL:      "https://public.blendkit.com/thumbnails/assets/a/files/top-large.jpg",
+		WebpGeneratedTimestamp: 1789670237,
+		Files: []AssetFile{
+			{
+				FileType:               "thumbnail",
+				ThumbnailSmallUrl:      "https://public.blendkit.com/thumbnails/assets/a/files/file-small-1.jpg",
+				ThumbnailSmallUrlWebp:  "https://public.blendkit.com/thumbnails/assets/a/files/file-small-1.jpg.webp?webp_generated=1789670237",
+				ThumbnailMiddleUrl:     "https://public.blendkit.com/thumbnails/assets/a/files/file-middle-1.jpg",
+				ThumbnailMiddleUrlWebp: "https://public.blendkit.com/thumbnails/assets/a/files/file-middle-1.jpg.webp?webp_generated=1789670237",
+			},
+			{
+				FileType:               "thumbnail",
+				ThumbnailSmallUrl:      "https://public.blendkit.com/thumbnails/assets/a/files/file-small-2.jpg",
+				ThumbnailSmallUrlWebp:  "https://public.blendkit.com/thumbnails/assets/a/files/file-small-2.jpg.webp?webp_generated=1789670237",
+				ThumbnailMiddleUrl:     "https://public.blendkit.com/thumbnails/assets/a/files/file-middle-2.jpg",
+				ThumbnailMiddleUrlWebp: "https://public.blendkit.com/thumbnails/assets/a/files/file-middle-2.jpg.webp?webp_generated=1789670237",
+			},
+		},
+	}
+
+	smallTask, fullTask, _, _ := parseThumbnailsOnAsset(asset, 0, 1, t.TempDir(), "5.0.0", &BlenderVersionStruct{Major: 5, Minor: 2, Patch: 1})
+
+	if smallTask == nil {
+		t.Fatal("small thumbnail task is nil")
+	}
+	if fullTask == nil {
+		t.Fatal("full thumbnail task is nil")
+	}
+	smallData := smallTask.Data.(DownloadThumbnailData)
+	if smallData.ImageURL != asset.ThumbnailSmallURLWebp {
+		t.Errorf("small ImageURL = %v, want asset-level URL %v", smallData.ImageURL, asset.ThumbnailSmallURLWebp)
+	}
+	if smallData.FallbackImageURL != asset.ThumbnailSmallURL {
+		t.Errorf("small FallbackImageURL = %v, want asset-level fallback %v", smallData.FallbackImageURL, asset.ThumbnailSmallURL)
+	}
+	fullData := fullTask.Data.(DownloadThumbnailData)
+	if fullData.ImageURL != asset.ThumbnailMiddleURLWebp {
+		t.Errorf("full ImageURL = %v, want asset-level URL %v", fullData.ImageURL, asset.ThumbnailMiddleURLWebp)
+	}
+	if fullData.FallbackImageURL != asset.ThumbnailMiddleURL {
+		t.Errorf("full FallbackImageURL = %v, want asset-level fallback %v", fullData.FallbackImageURL, asset.ThumbnailMiddleURL)
+	}
+}
+
 func Test_isWebpSupported(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
@@ -1800,6 +1924,80 @@ func Test_getFullThumbnailURL(t *testing.T) {
 				t.Errorf("getFullThumbnailURL() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func Test_DownloadThumbnailFallsBackWhenWebpDenied(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/thumb.webp":
+			http.Error(w, "AccessDenied", http.StatusForbidden)
+		case "/thumb.jpg":
+			w.Header().Set("Content-Type", "image/jpeg")
+			_, _ = w.Write([]byte("jpg-data"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	oldClient := ClientBigThumbs
+	ClientBigThumbs = server.Client()
+	defer func() { ClientBigThumbs = oldClient }()
+
+	for {
+		select {
+		case <-AddTaskCh:
+		default:
+			goto drained
+		}
+	}
+drained:
+
+	tempDir := t.TempDir()
+	webpPath := filepath.Join(tempDir, "thumb.webp")
+	jpgPath := filepath.Join(tempDir, "thumb.jpg")
+	task := NewTask(DownloadThumbnailData{
+		AddonVersion:      "5.0.0",
+		ThumbnailType:     "small",
+		ImagePath:         webpPath,
+		ImageURL:          server.URL + "/thumb.webp",
+		FallbackImagePath: jpgPath,
+		FallbackImageURL:  server.URL + "/thumb.jpg",
+		AssetBaseID:       "asset-id",
+	}, 1, "task-id", "thumbnail_download")
+
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+	DownloadThumbnail(task, wg)
+	wg.Wait()
+
+	var got *Task
+	select {
+	case got = <-AddTaskCh:
+	default:
+		t.Fatal("DownloadThumbnail did not report a task")
+	}
+
+	if got.Status != "finished" {
+		t.Fatalf("DownloadThumbnail() status = %v, want finished, message: %s", got.Status, got.Message)
+	}
+	data := got.Data.(DownloadThumbnailData)
+	if data.ImageURL != server.URL+"/thumb.jpg" {
+		t.Errorf("DownloadThumbnail() ImageURL = %v, want fallback URL", data.ImageURL)
+	}
+	if data.ImagePath != jpgPath {
+		t.Errorf("DownloadThumbnail() ImagePath = %v, want fallback path %v", data.ImagePath, jpgPath)
+	}
+	if _, err := os.Stat(webpPath); !os.IsNotExist(err) {
+		t.Errorf("primary webp path should not be written, stat err: %v", err)
+	}
+	content, err := os.ReadFile(jpgPath)
+	if err != nil {
+		t.Fatalf("fallback file was not written: %v", err)
+	}
+	if string(content) != "jpg-data" {
+		t.Errorf("fallback file content = %q, want jpg-data", string(content))
 	}
 }
 
