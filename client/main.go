@@ -3833,7 +3833,7 @@ type GetThisModelData struct {
 }
 
 func bkclientjsGetAsset(appID int, apiKey, assetBaseID, assetID, resolution string, targetSoftware Software) {
-	assetData, err := GetAssetInstance(assetBaseID)
+	assetData, err := GetAssetInstance(assetBaseID, apiKey)
 	if err != nil {
 		BKLog.Printf("%s GetAssetInstance error: %v", EmoBKClientJS, err)
 		return
@@ -4058,9 +4058,19 @@ func bkclientjsGetAsset(appID int, apiKey, assetBaseID, assetID, resolution stri
 
 // Get data for single Asset instance by assetBaseID via Search on the API - as advised by Petr.
 // https://devel.blendkit.com/api/v1/docs/#tag/search
-func GetAssetInstance(assetBaseID string) (Asset, error) {
+func GetAssetInstance(assetBaseID, apiKey string) (Asset, error) {
 	url := fmt.Sprintf("%s/api/v1/search/?query=asset_base_id:%s", *Server, assetBaseID)
-	resp, err := ClientAPI.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return Asset{}, err
+	}
+	addonVersion := ""
+	if StartingAddonVersion != nil {
+		addonVersion = *StartingAddonVersion
+	}
+	req.Header = getHeaders(apiKey, *SystemID, addonVersion, "", 0)
+
+	resp, err := ClientAPI.Do(req)
 	if err != nil {
 		return Asset{}, err
 	}

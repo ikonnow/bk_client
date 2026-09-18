@@ -979,18 +979,20 @@ func TestGetAssetInstance(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			originalClient := ClientAPI
+			transport := &mockTransport{response: tt.mockResp}
 			mockClient := &http.Client{
-				Transport: &mockTransport{
-					response: tt.mockResp,
-				},
+				Transport: transport,
 			}
 			ClientAPI = mockClient
 			defer func() { ClientAPI = originalClient }()
 
-			got, err := GetAssetInstance(tt.assetBaseID)
+			got, err := GetAssetInstance(tt.assetBaseID, "test-api-key")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetAssetInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
+			}
+			if transport.request != nil && transport.request.Header.Get("Authorization") != "Bearer test-api-key" {
+				t.Errorf("Authorization header = %q, want %q", transport.request.Header.Get("Authorization"), "Bearer test-api-key")
 			}
 
 			if tt.wantErr {
@@ -1009,6 +1011,7 @@ func TestGetAssetInstance(t *testing.T) {
 
 type mockTransport struct {
 	response *http.Response
+	request  *http.Request
 }
 
 func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -1016,6 +1019,7 @@ func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("no response configured")
 	}
 	m.response.Request = req
+	m.request = req
 	return m.response, nil
 }
 
