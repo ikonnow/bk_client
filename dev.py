@@ -843,7 +843,7 @@ def main():
     p_verify.set_defaults(func=verify)
 
     p_release = sub.add_parser("release", help="Make release from prebuilt binaries.")
-    p_release.add_argument("--prebuilt-bin-dir", help="Directory containing prebuilt binaries.")
+    p_release.add_argument("--prebuilt-bin-dir", required=True, help="Directory containing prebuilt binaries.")
     p_release.add_argument("--out", default="out", help="Output directory (default: ./out).")
     p_release.set_defaults(func=release)
 
