@@ -76,10 +76,12 @@ python dev.py verify <path>    # verify code-signing/notarization of built binar
 ```
 
 `build` requires native CGO prerequisites and produces the host binary and
-`bk_client.zip` in `out/vX.Y.Z/`. Packaging warnings about other platform
-binaries are expected for a local build. Signed releases use separate CI
+`bk_client.zip` in `out/vX.Y.Z/`. Packaging lists the binaries included in the
+archive. Signed releases use separate CI
 builds for each supported platform, then sign and verify the binaries and
 combine them with `python dev.py release --prebuilt-bin-dir ./binaries`.
+The release command requires all six standard platform binaries; legacy
+binaries are optional.
 
 You can also work directly in the `client/` directory with the Go toolchain:
 

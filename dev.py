@@ -326,10 +326,6 @@ def package(out_dir: str, version: str) -> str:
     for goos, goarch, output in ALL_TARGETS:
         bin_path = os.path.join(out_dir, output)
         if not os.path.isfile(bin_path):
-            # Legacy targets are optional. Warn about missing standard targets;
-            # host-only builds normally produce these warnings.
-            if (goos, goarch, output) in BUILD_TARGETS:
-                print(f"package: WARNING missing binary {output}, skipping in manifest")
             continue
         binaries.append(
             {
@@ -350,6 +346,9 @@ def package(out_dir: str, version: str) -> str:
 
     _write_release_zip(zip_path, root, out_dir, binaries, manifest)
 
+    print(f"Packaged {len(binaries)} {'binary' if len(binaries) == 1 else 'binaries'}:")
+    for binary in binaries:
+        print(f"  {binary['filename']}")
     print(f"Blendkit-Client v{version} release bundle written to {zip_path}.")
     return zip_path
 
@@ -541,13 +540,19 @@ def live(args: argparse.Namespace) -> None:
 def release(args: argparse.Namespace) -> None:
     """Create a release by using prebuilt binaries.
 
-    Checking their code-signining and pack them into a final .zip.
+    Require all standard targets, verify signatures and package a final zip.
+    Legacy targets are optional.
 
     Args:
         args: Parsed CLI arguments.
     """
     version = read_client_version()
     in_dir = os.path.abspath(args.prebuilt_bin_dir)
+    if not os.path.isdir(in_dir):
+        sys.exit(f"error: prebuilt binary directory does not exist: {in_dir}")
+    missing = [filename for _, _, filename in BUILD_TARGETS if not os.path.isfile(os.path.join(in_dir, filename))]
+    if missing:
+        sys.exit(f"error: missing required release binaries in {in_dir}:\n  " + "\n  ".join(missing))
     out_dir = os.path.abspath(os.path.join(args.out, f"v{version}"))
     os.makedirs(out_dir, exist_ok=True)
 
