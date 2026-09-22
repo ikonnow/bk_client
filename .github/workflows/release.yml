@@ -1,6 +1,6 @@
 name: Release (draft / testing only)
 
-# Builds the cross-platform Client bundle (bk_client.zip) via dev.py for quick,
+# Builds a Linux host-only Client bundle (bk_client.zip) via dev.py for quick,
 # UNSIGNED test builds. This workflow does NOT publish real releases.
 #
 # HOW TO USE:
@@ -46,7 +46,7 @@ jobs:
         id: ver
         run: echo "version=$(cat client/VERSION)" >> "$GITHUB_OUTPUT"
 
-      - name: Build cross-platform bundle
+      - name: Build Linux host bundle
         run: python dev.py build
 
       - name: Locate bundle

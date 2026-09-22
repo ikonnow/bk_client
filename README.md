@@ -67,13 +67,19 @@ pre-commit run --all-files      # optional: run the hooks against the whole repo
 All commands go through [`dev.py`](dev.py):
 
 ```sh
-python dev.py build            # cross-compile the Client for all platforms -> ./out/vX.Y.Z/
+python dev.py build            # build and package the Client for this host -> ./out/vX.Y.Z/
 python dev.py test             # run Go unit tests + lint the Python recipes
 python dev.py lint             # ruff + pydoclint on client/tools (no changes)
 python dev.py format           # ruff format + auto-fix on client/tools
 python dev.py docs             # regenerate the API documentation
 python dev.py verify <path>    # verify code-signing/notarization of built binaries
 ```
+
+`build` requires native CGO prerequisites and produces the host binary and
+`bk_client.zip` in `out/vX.Y.Z/`. Packaging warnings about other platform
+binaries are expected for a local build. Signed releases use separate CI
+builds for each supported platform, then sign and verify the binaries and
+combine them with `python dev.py release --prebuilt-bin-dir ./binaries`.
 
 You can also work directly in the `client/` directory with the Go toolchain:
 

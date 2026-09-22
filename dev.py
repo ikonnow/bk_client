@@ -26,7 +26,7 @@ add-on repositories (blendkit_addon, bk_maya, blendkit_rhino) keep their own
 dev.py for packaging the Client into their distributions.
 
 Commands:
-    build   Cross-compile the Client for all supported platforms.
+    build   Compile the Client for the current platform and package it.
     run     Build for the current platform and run the Client standalone.
     live    Run live integration tests against a real server (creds from .env).
     verify  Verify code-signing/notarization of built Client binaries.
@@ -145,7 +145,7 @@ BUILD_TARGETS = [
 ]
 
 # Targets that require a special toolchain and are NOT produced by the normal
-# `dev.py build` cross-compile (which uses the modern go.mod). They are built
+# `dev.py build` host build (which uses the modern go.mod). They are built
 # separately in CI (see build.yml) and merged in at release time. Packaging
 # includes them only when the corresponding binary is present.
 LEGACY_TARGETS = [
@@ -206,10 +206,10 @@ def read_client_version() -> str:
 
 
 def build(args: argparse.Namespace) -> None:
-    """Compile the Blendkit Client for current platform.
+    """Compile the Blendkit Client for the current platform and package it.
 
-    Built binary can be used for local testing or later used in GitHub actions for multi-platform release build.
-    Cross-compilation is not possible as parts of the Blendkit Client requires CGO.
+    The build requires native CGO prerequisites and selects only the host target.
+    Signed releases use separate CI builds for each supported platform.
     Binary is written to ``<out>/v<version>/`` so the directory name matches
     the format expected by the add-on repos' ``copy_client_binaries`` step.
 
@@ -326,8 +326,8 @@ def package(out_dir: str, version: str) -> str:
     for goos, goarch, output in ALL_TARGETS:
         bin_path = os.path.join(out_dir, output)
         if not os.path.isfile(bin_path):
-            # Legacy targets are optional (only present in full CI releases);
-            # only the standard cross-compiled targets are expected every time.
+            # Legacy targets are optional. Warn about missing standard targets;
+            # host-only builds normally produce these warnings.
             if (goos, goarch, output) in BUILD_TARGETS:
                 print(f"package: WARNING missing binary {output}, skipping in manifest")
             continue
