@@ -157,6 +157,27 @@ LEGACY_TARGETS = [
 ALL_TARGETS = BUILD_TARGETS + LEGACY_TARGETS
 
 
+def get_host_build_target() -> tuple[str, str, str]:
+    """Select the shipped build target for the current host.
+
+    Returns:
+        The matching GOOS, GOARCH and output filename from BUILD_TARGETS.
+
+    Raises:
+        ValueError: If the detected OS and architecture are unsupported.
+    """
+    system = platform.system()
+    machine = platform.machine()
+    goos = system.lower()
+    architecture = machine.lower()
+    goarch = {"x86_64": "amd64", "aarch64": "arm64"}.get(architecture, architecture)
+    for target in BUILD_TARGETS:
+        if target[:2] == (goos, goarch):
+            return target
+    message = f"Unsupported build platform: OS={system!r}, architecture={machine!r}"
+    raise ValueError(message)
+
+
 def _kill_existing_dev_clients(binary: str) -> None:
     """Terminate dev Client processes left over from a previous ``run``.
 
@@ -195,6 +216,12 @@ def build(args: argparse.Namespace) -> None:
     Args:
         args: Parsed CLI arguments. Uses ``args.out`` as the output directory.
     """
+    try:
+        target = get_host_build_target()
+    except ValueError as exc:
+        sys.exit(f"error: {exc}")
+    goos, goarch, bin_name = target
+
     version = read_client_version()
     out_dir = os.path.abspath(os.path.join(args.out, f"v{version}"))
     if os.path.isdir(args.out):
@@ -202,17 +229,6 @@ def build(args: argparse.Namespace) -> None:
     os.makedirs(out_dir, exist_ok=True)
     ldflags = f"-X main.ClientVersion={version}"
 
-    os_name = platform.system().lower()
-    architecture = platform.machine().lower()
-    if architecture == "aarch64":
-        architecture = "arm64"
-    for target in BUILD_TARGETS:
-        if target[0] != os_name:
-            continue
-        if target[1] != architecture:
-            continue
-        goos, goarch, bin_name = target
-        break
     print(f"Building for {goos} ({goarch}), binary name: {bin_name}")
 
     build_path = os.path.join(out_dir, bin_name)
