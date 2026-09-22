@@ -19,7 +19,6 @@
 package main
 
 import (
-	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,9 +26,6 @@ import (
 
 	"fyne.io/systray"
 )
-
-//go:embed icons/blendkit.ico
-var trayIcon []byte
 
 // runTray shows the Blendkit-Client system tray icon and blocks until the user
 // quits from its menu. It is expected to be called on the main goroutine while
