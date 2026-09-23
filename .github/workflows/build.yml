@@ -53,7 +53,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=1 go build -o out/bk_client-linux-arm64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-linux-arm64 -trimpath -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }} -s"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-linux-arm64
@@ -76,7 +76,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=1 go build -o out/bk_client-linux-x86_64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-linux-x86_64 -trimpath -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }} -s"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-linux-x86_64
@@ -99,7 +99,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=1 go build -o out/bk_client-macos-arm64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-macos-arm64 -trimpath -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }} -s"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-macos-arm64
@@ -122,7 +122,7 @@ jobs:
         run: go env
       - name: Build Blendkit_Client
         working-directory: ./client
-        run: CGO_ENABLED=1 go build -o out/bk_client-macos-x86_64 -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: CGO_ENABLED=1 go build -o out/bk_client-macos-x86_64 -trimpath -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }} -s"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-macos-x86_64
@@ -147,7 +147,7 @@ jobs:
         working-directory: ./client
         env:
           CGO_ENABLED: '1'
-        run: go build -o out/bk_client-windows-arm64.exe -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: go build -o out/bk_client-windows-arm64.exe -trimpath -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }} -s"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-windows-arm64.exe
@@ -172,7 +172,7 @@ jobs:
         working-directory: ./client
         env:
           CGO_ENABLED: '1'
-        run: go build -o out/bk_client-windows-x86_64.exe -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: go build -o out/bk_client-windows-x86_64.exe -trimpath -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }} -s"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-windows-x86_64.exe
@@ -210,7 +210,7 @@ jobs:
           CGO_ENABLED: '1'
           GOOS: windows
           GOARCH: amd64
-        run: go build -o out/bk_client-windows7-x86_64.exe -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }}"
+        run: go build -o out/bk_client-windows7-x86_64.exe -trimpath -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }} -s"
       - uses: actions/upload-artifact@v7
         with:
           name: bk_client-windows7-x86_64.exe

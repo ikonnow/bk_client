@@ -213,6 +213,9 @@ def build(args: argparse.Namespace) -> None:
     Binary is written to ``<out>/v<version>/`` so the directory name matches
     the format expected by the add-on repos' ``copy_client_binaries`` step.
 
+    Binaries are stripped (-ldflags="-s") of symbol table and debug information to reduce their size.
+    Option -trimpath is used to not include username and directory structure to the panic logs.
+
     Args:
         args: Parsed CLI arguments. Uses ``args.out`` as the output directory.
     """
@@ -223,18 +226,19 @@ def build(args: argparse.Namespace) -> None:
     goos, goarch, bin_name = target
 
     version = read_client_version()
+    ldflags = f"-X main.ClientVersion={version} -s"
+
     out_dir = os.path.abspath(os.path.join(args.out, f"v{version}"))
     if os.path.isdir(args.out):
         shutil.rmtree(args.out)
     os.makedirs(out_dir, exist_ok=True)
-    ldflags = f"-X main.ClientVersion={version}"
 
     print(f"Building for {goos} ({goarch}), binary name: {bin_name}")
 
     build_path = os.path.join(out_dir, bin_name)
     env = {**os.environ, "GOOS": goos, "GOARCH": goarch, "CGO_ENABLED": "1"}
     proc = subprocess.Popen(
-        ["go", "build", "-o", build_path, "-ldflags", ldflags, "."],
+        ["go", "build", "-o", build_path, "-ldflags", ldflags, "-trimpath", "."],
         env=env,
         cwd=CLIENT_DIR,
     )
