@@ -17,7 +17,7 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 | Method | Path | Versioned | Auth | Summary | Request body |
 |---|---|:---:|:---:|---|---|
 | GET | `/` |  |  | Client status page | — |
-| POST | `/report` | ✓ |  | Poll for tasks (Blender) | `GetReportData` |
+| POST | `/report` | ✓ |  | Poll for tasks | `GetReportData` |
 | POST | `/report_event` | ✓ |  | Report a telemetry event | `ReportEventData` |
 | POST | `/report_usages` | ✓ |  | Report the assets present in a file at a save or a render | `ReportUsagesData` |
 | GET, POST | `/shutdown` | ✓ |  | Shut down the Client | — |
@@ -149,7 +149,7 @@ Returns a small HTML page with the Client PID, version, platform, system ID and 
 
 #### `POST /report`
 
-Primary polling endpoint for Blender add-ons. Subscribes the add-on on first call, refreshes the inactivity timer and returns the list of pending/finished/error tasks for the calling app. Rejects add-ons that do not send addon_version.
+Primary polling endpoint for add-ons. Subscribes the add-on on first call, refreshes the inactivity timer and returns the list of pending/finished/error tasks for the calling app. Rejects add-ons that do not send addon_version. The host software is identified by `software` (e.g. "Blender", "Godot", "Unreal") and `software_version`; without `software` the add-on registers as Blender with `blender_version`. For Blender, `software_version` and `blender_version` are equivalent and `software_version` wins on conflict; `software_version` without `software` is ignored. Inconsistent identity is only logged, never rejected. The identity only labels the app (browser discovery, Origin-Name header); it does not change task behavior.
 
 - **Handler:** `reportHandler`
 - **Versioned alias:** `/vX.Y/report`

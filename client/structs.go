@@ -60,9 +60,13 @@ type MinimalTaskData struct {
 
 // Data required as part of the request for reports. There is extra field project_name expected, so
 // the running add-on (Blender, Godot) can be identified more easily if multiple windows are opened.
+// Software and SoftwareVersion identify the host software; when Software is empty the add-on is
+// registered as Blender with BlenderVersion, as legacy Blender add-ons expect.
 type GetReportData struct {
 	MinimalTaskData
-	ProjectName string `json:"project_name,omitempty"` // Name of the currently opened project
+	ProjectName     string `json:"project_name,omitempty"`     // Name of the currently opened project
+	Software        string `json:"software,omitempty"`         // Host software name, e.g. "Blender", "Godot", "Unreal"
+	SoftwareVersion string `json:"software_version,omitempty"` // Host software version, opaque string never parsed
 }
 
 // TaskStatusUpdate is a struct for updating the status of a task through a channel.

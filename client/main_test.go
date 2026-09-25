@@ -1167,6 +1167,194 @@ func BenchmarkReportHandler(b *testing.B) {
 	BKLog = log.New(os.Stdout, "⬡  ", log.LstdFlags|log.Lmicroseconds)
 }
 
+// /report registers the host software from software/software_version, falling back to
+// legacy Blender identity from blender_version.
+func TestReportHandlerSoftwareIdentity(t *testing.T) {
+	tests := []struct {
+		name               string
+		body               string
+		wantStatus         int
+		wantName           string
+		wantVersion        string
+		wantBlenderVersion string // BlenderVersion passed to SubscribeNewApp
+	}{
+		{
+			name:               "legacy Blender add-on payload",
+			body:               `{"app_id": 1, "api_key": "", "platform_version": "Linux", "addon_version": "3.20.1", "project_name": "scene.blend", "blender_version": "5.0.1"}`,
+			wantStatus:         http.StatusOK,
+			wantName:           "Blender",
+			wantVersion:        "5.0.1",
+			wantBlenderVersion: "5.0.1",
+		},
+		{
+			name:       "legacy Unreal add-on payload",
+			body:       `{"app_id": 1, "api_key": "", "addon_version": "0.1.0", "platform_version": "Linux"}`,
+			wantStatus: http.StatusOK,
+			wantName:   "Blender",
+		},
+		{
+			name:               "Blender with blender_version only",
+			body:               `{"app_id": 1, "addon_version": "3.20.1", "software": "Blender", "blender_version": "5.0.1"}`,
+			wantStatus:         http.StatusOK,
+			wantName:           "Blender",
+			wantVersion:        "5.0.1",
+			wantBlenderVersion: "5.0.1",
+		},
+		{
+			name:               "non-Blender ignores blender_version for identity",
+			body:               `{"app_id": 1, "addon_version": "0.1.0", "software": "Unreal", "software_version": "5.4.1", "blender_version": "4.5.0"}`,
+			wantStatus:         http.StatusOK,
+			wantName:           "Unreal",
+			wantVersion:        "5.4.1",
+			wantBlenderVersion: "4.5.0",
+		},
+		{
+			name:        "Godot with software and software_version",
+			body:        `{"app_id": 1, "addon_version": "0.5.0", "software": "Godot", "software_version": "4.7.0"}`,
+			wantStatus:  http.StatusOK,
+			wantName:    "Godot",
+			wantVersion: "4.7.0",
+		},
+		{
+			name:       "Unreal without software_version",
+			body:       `{"app_id": 1, "addon_version": "0.1.0", "software": "Unreal"}`,
+			wantStatus: http.StatusOK,
+			wantName:   "Unreal",
+		},
+		{
+			name:               "Blender with software_version only",
+			body:               `{"app_id": 1, "addon_version": "3.20.1", "software": "Blender", "software_version": "5.0.1"}`,
+			wantStatus:         http.StatusOK,
+			wantName:           "Blender",
+			wantVersion:        "5.0.1",
+			wantBlenderVersion: "5.0.1",
+		},
+		{
+			name:               "Blender with matching versions",
+			body:               `{"app_id": 1, "addon_version": "3.20.1", "software": "Blender", "software_version": "5.0.1", "blender_version": "5.0.1"}`,
+			wantStatus:         http.StatusOK,
+			wantName:           "Blender",
+			wantVersion:        "5.0.1",
+			wantBlenderVersion: "5.0.1",
+		},
+		{
+			name:               "Blender with conflicting versions uses software_version",
+			body:               `{"app_id": 1, "addon_version": "3.20.1", "software": "Blender", "software_version": "5.0.1", "blender_version": "4.5.0"}`,
+			wantStatus:         http.StatusOK,
+			wantName:           "Blender",
+			wantVersion:        "5.0.1",
+			wantBlenderVersion: "5.0.1",
+		},
+		{
+			name:               "software_version without software is ignored",
+			body:               `{"app_id": 1, "addon_version": "3.20.1", "software_version": "4.7.0", "blender_version": "5.0.1"}`,
+			wantStatus:         http.StatusOK,
+			wantName:           "Blender",
+			wantVersion:        "5.0.1",
+			wantBlenderVersion: "5.0.1",
+		},
+		{
+			name:       "missing addon_version still rejected",
+			body:       `{"app_id": 1, "software": "Godot", "software_version": "4.7.0"}`,
+			wantStatus: http.StatusForbidden,
+		},
+	}
+
+	BKLog = log.New(io.Discard, "⬡  ", log.LstdFlags|log.Lmicroseconds)
+	defer func() { BKLog = log.New(os.Stdout, "⬡  ", log.LstdFlags|log.Lmicroseconds) }()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			TasksMux.Lock()
+			Tasks = make(map[int]map[string]*Task)
+			TasksMux.Unlock()
+			AvailableSoftwaresMux.Lock()
+			AvailableSoftwares = make(map[int]Software)
+			AvailableSoftwaresMux.Unlock()
+
+			var subscribed MinimalTaskData
+			subscribe := func(data MinimalTaskData) {
+				subscribed = data
+				mockSubscribeNewApp(data)
+			}
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest("POST", "/report", strings.NewReader(tt.body))
+			reportHandlerDo(rr, req, subscribe)
+
+			if rr.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d (body %q)", rr.Code, tt.wantStatus, rr.Body.String())
+			}
+			AvailableSoftwaresMux.Lock()
+			software, registered := AvailableSoftwares[1]
+			AvailableSoftwaresMux.Unlock()
+			if tt.wantStatus != http.StatusOK {
+				if registered {
+					t.Errorf("rejected report registered software %+v", software)
+				}
+				return
+			}
+			if !registered {
+				t.Fatal("software not registered")
+			}
+			if software.Name != tt.wantName || software.Version != tt.wantVersion {
+				t.Errorf("registered %q %q, want %q %q", software.Name, software.Version, tt.wantName, tt.wantVersion)
+			}
+			if software.protocol != protocolReport {
+				t.Errorf("protocol = %v, want protocolReport", software.protocol)
+			}
+			if subscribed.BlenderVersion != tt.wantBlenderVersion {
+				t.Errorf("subscribed BlenderVersion = %q, want %q", subscribed.BlenderVersion, tt.wantBlenderVersion)
+			}
+		})
+	}
+
+	AvailableSoftwaresMux.Lock()
+	AvailableSoftwares = make(map[int]Software)
+	AvailableSoftwaresMux.Unlock()
+}
+
+// /godot/report keeps its protocol regardless of the software name, so behavior never
+// depends on which software registered.
+func TestGodotReportHandlerSetsProtocol(t *testing.T) {
+	TasksMux.Lock()
+	Tasks = map[int]map[string]*Task{7431: {}} // already subscribed, avoid online fetches
+	TasksMux.Unlock()
+	AvailableSoftwaresMux.Lock()
+	AvailableSoftwares = make(map[int]Software)
+	AvailableSoftwaresMux.Unlock()
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/godot/report", strings.NewReader(`{"appID": 7431, "name": "Godot", "version": "4.7.0", "addonVersion": "0.5.0"}`))
+	godotReportHandler(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %q)", rr.Code, rr.Body.String())
+	}
+	AvailableSoftwaresMux.Lock()
+	software := AvailableSoftwares[7431]
+	AvailableSoftwares = make(map[int]Software)
+	AvailableSoftwaresMux.Unlock()
+	if software.Name != "Godot" || software.protocol != protocolGodotReport {
+		t.Errorf("registered %q with protocol %v, want Godot with protocolGodotReport", software.Name, software.protocol)
+	}
+}
+
+func TestInactivityToleranceDependsOnProtocolNotName(t *testing.T) {
+	tests := []struct {
+		software Software
+		want     time.Duration
+	}{
+		{Software{Name: "Blender", protocol: protocolReport}, 120 * time.Second},
+		{Software{Name: "Unreal", protocol: protocolReport}, 120 * time.Second},
+		{Software{Name: "Godot", protocol: protocolGodotReport}, 60 * time.Second},
+	}
+	for _, tt := range tests {
+		if got := inactivityTolerance(tt.software); got != tt.want {
+			t.Errorf("inactivityTolerance(%s, protocol %v) = %v, want %v", tt.software.Name, tt.software.protocol, got, tt.want)
+		}
+	}
+}
+
 func Test_parseThumbnailsOnAsset(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
