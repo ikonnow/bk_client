@@ -45,6 +45,7 @@ func runTray(serverURL, listenAddr string) {
 
 		systray.AddSeparator()
 		mOpenWeb := systray.AddMenuItem("Open Blendkit.com", "Open the Blendkit website in your browser")
+		mOpenStatus := systray.AddMenuItem("Open Client Status", "Open the Client's status page with connected software in your browser")
 		mOpenDev := systray.AddMenuItem("Open Dev Dashboard", "Open the Client's developer dashboard in your browser")
 		// The dev dashboard is only served when BLENDKIT_DEBUG=1; hide the
 		// menu entry otherwise so it can't link to a 404.
@@ -54,6 +55,7 @@ func runTray(serverURL, listenAddr string) {
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("Quit", "Stop the Blendkit-Client")
 
+		statusURL := fmt.Sprintf("http://%s/", listenAddr)
 		devURL := fmt.Sprintf("http://%s/dev", listenAddr)
 
 		go func() {
@@ -61,6 +63,8 @@ func runTray(serverURL, listenAddr string) {
 				select {
 				case <-mOpenWeb.ClickedCh:
 					openInBrowser(serverURL)
+				case <-mOpenStatus.ClickedCh:
+					openInBrowser(statusURL)
 				case <-mOpenDev.ClickedCh:
 					openInBrowser(devURL)
 				case <-mQuit.ClickedCh:

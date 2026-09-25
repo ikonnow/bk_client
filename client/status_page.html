@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Blendkit Client Status</title>
+<link rel="icon" href="/favicon.ico" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fafafa; --fg: #222; --muted: #666; --line: #ddd;
+    --hover: #eee; --accent: #6334fc; --danger: #b32d32;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1b1b; --fg: #eee; --muted: #aaa; --line: #383838;
+      --hover: #292929; --accent: #a58aff; --danger: #f06b6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 2rem 1.25rem; }
+  header { display: flex; align-items: center; gap: .75rem; margin-bottom: 1.25rem; }
+  .logo { width: 28px; height: 33px; flex-shrink: 0; }
+  h1 { font-size: 1.75rem; margin: 0; font-weight: 600; letter-spacing: -.03em; }
+  h2 { font-size: 1.25rem; font-weight: 400; color: var(--muted); margin: 1.75rem 0 .75rem; letter-spacing: -.02em; }
+  .block { margin-bottom: 1.75rem; }
+  h3 { margin: 0 0 .5rem; font-size: 1.4rem; line-height: 1.35; font-weight: 600; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  h3 .sub { font-weight: 400; }
+  .actions { margin-top: .75rem; }
+  dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .15rem 1.5rem; margin: 0; }
+  dt { color: var(--muted); }
+  dt[title] { cursor: help; text-decoration: underline dotted; text-underline-offset: .2em; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  button {
+    font: inherit; font-size: .9rem; cursor: pointer; border-radius: 999px;
+    padding: .3rem .85rem; background: transparent; color: var(--fg); border: 1px solid var(--line);
+  }
+  button:hover { background: var(--hover); border-color: var(--muted); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  button.danger { color: var(--danger); }
+  button.danger:hover { border-color: var(--danger); }
+  button:disabled { opacity: .5; cursor: default; }
+  #notice { color: var(--muted); margin: 0 0 1rem; overflow-wrap: anywhere; }
+  #notice:empty { display: none; }
+  #notice.err { color: var(--danger); }
+  .empty { color: var(--muted); margin: 0; }
+  @media (max-width: 400px) {
+    main { padding: 1.25rem 1rem; }
+    dl { column-gap: .75rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 276.67 319.87" class="logo" aria-hidden="true"><defs><linearGradient id="b" x1="351.7" x2="376.03" y1="172.76" y2="435.53" gradientTransform="translate(-224.39 -146.3)" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#28afdf"/><stop offset=".112" stop-color="#48b1ba"/><stop offset=".199" stop-color="#53b2a3"/><stop offset=".309" stop-color="#5fb47d"/><stop offset=".388" stop-color="#66b557"/><stop offset=".416" stop-color="#6db34a"/><stop offset=".557" stop-color="#9e9c42"/><stop offset=".722" stop-color="#c67937"/><stop offset=".846" stop-color="#de522d"/><stop offset="1" stop-color="#ed1f24"/></linearGradient><clipPath id="a"><path d="m138.93 320.42 138.33-79.97V80.52L138.93.55.59 80.52v159.93z"/></clipPath></defs><g clip-path="url(#a)" transform="translate(-.59 -.55)"><path fill="url(#b)" d="M-71.81-50.57h421.47v422.11H-71.81z" transform="rotate(-44.4 138.93 160.49)"/></g></svg>
+    <h1>Blendkit Client</h1>
+  </header>
+  <div id="notice" role="status"></div>
+
+  <dl id="client" aria-label="Client information"></dl>
+  <div class="actions" id="client-actions"><button id="quit" class="danger">Quit Client</button></div>
+
+  <h2 id="sw-heading">Connected software</h2>
+  <div id="softwares"></div>
+</main>
+
+<script>
+  const CLIENT = /*CLIENT_INFO*/null;
+
+  const LABELS = {
+    systemID: "machine id", startedFrom: "started from", appID: "app id (pid)",
+    addonVersion: "add-on version", assetsPath: "assets path", modelFormat: "model format",
+  };
+  const HINTS = {
+    systemID: "Anonymous ID of this computer, sent to the Blendkit server. Support may ask for it.",
+  };
+  const TITLE_KEYS = ["name", "version", "projectName"];
+  const LAST_KEYS = ["pid", "appID"];
+
+  const $ = (id) => document.getElementById(id);
+
+  function fields(dl, obj, skip = []) {
+    dl.replaceChildren();
+    const entries = Object.entries(obj);
+    entries.sort(([a], [b]) => LAST_KEYS.includes(a) - LAST_KEYS.includes(b));
+    for (const [key, value] of entries) {
+      if (skip.includes(key) || value === "" || value === null || value === undefined) continue;
+      const dt = document.createElement("dt");
+      dt.textContent = LABELS[key] || key;
+      const dd = document.createElement("dd");
+      dd.textContent = String(value);
+      if (HINTS[key]) dt.title = dd.title = HINTS[key];
+      dl.append(dt, dd);
+    }
+  }
+
+  function notice(text, isError = false) {
+    $("notice").textContent = text;
+    $("notice").className = isError ? "err" : "";
+    refreshFailed = false;
+  }
+
+  async function post(path, body) {
+    const resp = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+    if (!resp.ok) throw new Error(`${resp.status} ${await resp.text()}`);
+  }
+
+  function renderSoftware(sw) {
+    const block = document.createElement("div");
+    block.className = "block";
+
+    const heading = document.createElement("h3");
+    const name = document.createElement("span");
+    name.textContent = [sw.name || "Unknown", sw.version].filter(Boolean).join(" ");
+    heading.append(name);
+    if (sw.projectName) {
+      const project = document.createElement("span");
+      project.className = "sub";
+      project.textContent = sw.projectName;
+      heading.append(" – ", project);
+    }
+
+    const disconnect = document.createElement("button");
+    disconnect.textContent = "Disconnect";
+    disconnect.className = "danger";
+    disconnect.title = "Remove this software from the Client. A running add-on reconnects on its next report.";
+    disconnect.onclick = async () => {
+      disconnect.disabled = true;
+      try {
+        await post("/addons/unsubscribe", { app_id: sw.appID });
+        notice(`Disconnected ${name.textContent} (${sw.appID}).`);
+      } catch (e) {
+        notice(`Disconnect failed: ${e.message}`, true);
+      }
+      shown = null;
+      refresh();
+    };
+
+    const dl = document.createElement("dl");
+    fields(dl, sw, TITLE_KEYS);
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    actions.append(disconnect);
+    block.append(heading, dl, actions);
+    return block;
+  }
+
+  let shown = null;
+  let clientDown = false;
+  let refreshFailed = false;
+
+  async function refresh() {
+    let data;
+    try {
+      const resp = await fetch("/addons/list", { cache: "no-store" });
+      if (!resp.ok) throw new Error(`${resp.status} ${await resp.text()}`);
+      data = await resp.json();
+    } catch (e) {
+      clientDown = e instanceof TypeError;
+      notice(clientDown ? "Client is not running." : `Refresh failed: ${e.message}`, true);
+      refreshFailed = true;
+      $("client-actions").hidden = true;
+      $("sw-heading").textContent = "Connected software";
+      $("softwares").replaceChildren();
+      shown = null;
+      return;
+    }
+    if (clientDown) return location.reload();
+    if (refreshFailed) notice("");
+    $("client-actions").hidden = false;
+    const softwares = (data.softwares || []).sort((a, b) => a.appID - b.appID);
+    const json = JSON.stringify(softwares);
+    if (json === shown) return;
+    shown = json;
+    $("sw-heading").textContent = `Connected software (${softwares.length})`;
+    $("softwares").replaceChildren(...softwares.map(renderSoftware));
+    if (!softwares.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "No software connected.";
+      $("softwares").append(empty);
+    }
+  }
+
+  $("quit").onclick = async () => {
+    try {
+      await post("/shutdown");
+      $("client-actions").hidden = true;
+      notice("Client is shutting down.");
+      document.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    } catch (e) {
+      notice(`Quit failed: ${e.message}`, true);
+    }
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refresh();
+  });
+
+  let pending = null;
+  setInterval(() => {
+    if (!pending && document.visibilityState === "visible") {
+      pending = refresh().finally(() => { pending = null; });
+    }
+  }, 1000);
+
+  fields($("client"), CLIENT);
+  refresh();
+</script>
+</body>
+</html>
