@@ -613,7 +613,7 @@ func reportHandler(w http.ResponseWriter, r *http.Request) {
 	reportHandlerDo(w, r, SubscribeNewApp)
 }
 
-// Handles report for subscribed Blender add-ons.
+// Handles report for subscribed add-ons (Blender, or any software identified by the software field).
 // Validates if the request contains required data and if the version of this Client
 // matches the Client version which add-on expects. If not the request is rejected.
 func reportHandlerDo(w http.ResponseWriter, r *http.Request, funcSubscribeNewApp func(MinimalTaskData)) {
@@ -644,12 +644,18 @@ func reportHandlerDo(w http.ResponseWriter, r *http.Request, funcSubscribeNewApp
 		return
 	}
 
+	softwareName, softwareVersion := reportSoftwareIdentity(data)
+	if softwareName == blender {
+		data.BlenderVersion = softwareVersion
+	}
+
 	software := Software{
 		AppID:        data.AppID,
-		Name:         blender,
-		Version:      data.BlenderVersion,
+		Name:         softwareName,
+		Version:      softwareVersion,
 		AddonVersion: data.AddonVersion,
 		ProjectName:  data.ProjectName,
+		protocol:     protocolReport,
 	}
 	updateAvailableSoftware(software)
 
@@ -704,6 +710,30 @@ func reportHandlerDo(w http.ResponseWriter, r *http.Request, funcSubscribeNewApp
 	w.Header().Set("Blendkit-Client-Version", ClientVersion)
 	w.WriteHeader(http.StatusOK)
 	w.Write(responseJSON)
+}
+
+// reportSoftwareIdentity resolves the host software name and version of a /report request.
+// Without software the add-on is legacy Blender identified by blender_version. For Blender,
+// software_version and blender_version are equivalent; software_version wins on conflict.
+// Inconsistent identity is only logged: the version is an optional label, never worth
+// refusing registration over.
+func reportSoftwareIdentity(data GetReportData) (name, version string) {
+	if data.Software == "" {
+		if data.SoftwareVersion != "" {
+			BKLog.Printf("%v App %d sent software_version %q without software, ignoring it", EmoWarning, data.AppID, data.SoftwareVersion)
+		}
+		return blender, data.BlenderVersion
+	}
+	if data.Software != blender {
+		return data.Software, data.SoftwareVersion
+	}
+	if data.SoftwareVersion == "" {
+		return blender, data.BlenderVersion
+	}
+	if data.BlenderVersion != "" && data.SoftwareVersion != data.BlenderVersion {
+		BKLog.Printf("%v App %d sent software_version %q conflicting with blender_version %q, using software_version", EmoWarning, data.AppID, data.SoftwareVersion, data.BlenderVersion)
+	}
+	return blender, data.SoftwareVersion
 }
 
 // SubscribeNewApp adds new App into Tasks[AppID]. Call this only when TasksMux is locked!
@@ -3727,8 +3757,21 @@ type ClientStatus struct {
 	Softwares     []Software `json:"softwares"`
 }
 
-// Connected and running compatible software.
-// Right now this can be just instance of Blender.
+// reportProtocol records which report endpoint registered a Software. The Client decides
+// how to serve the software (browser download delivery, inactivity tolerance) by protocol,
+// never by Name, so any host software can register through any endpoint.
+type reportProtocol int
+
+const (
+	// protocolReport: registered via /report. Browser downloads are forwarded to the add-on
+	// as tasks and the add-on unsubscribes explicitly.
+	protocolReport reportProtocol = iota
+	// protocolGodotReport: registered via /godot/report. The Client downloads browser
+	// requests itself and relies on missed heartbeats to detect disconnect.
+	protocolGodotReport
+)
+
+// Connected and running compatible software (Blender, Godot, ...).
 type Software struct {
 	Name              string    `json:"name"`         // Name of the software
 	Version           string    `json:"version"`      // Version of the Software
@@ -3739,6 +3782,8 @@ type Software struct {
 	ModelFormat       string    `json:"modelFormat"`  // "gltf_godot" or "blend"
 	Resolution        string    `json:"resolution"`   // "resolution_2K" etc.
 	lastTimeConnected time.Time // To handle unsubscribe in softwares which does not allow it
+
+	protocol reportProtocol // Report endpoint which registered the software, decides its behavior
 }
 
 // Data needed from the browser (with bkclientjs lib) to ask for Download of an asset.
@@ -3839,8 +3884,8 @@ func bkclientjsGetAsset(appID int, apiKey, assetBaseID, assetID, resolution stri
 		return
 	}
 
-	// BLENDER -> send data to add-on, it will then make a search and ask for download
-	if targetSoftware.Name == blender {
+	// /report add-ons (Blender, ...) -> send data to add-on, it will then make a search and ask for download
+	if targetSoftware.protocol == protocolReport {
 		AddTaskCh <- &Task{
 			AppID:    appID,
 			TaskID:   uuid.New().String(),
@@ -3864,10 +3909,13 @@ func bkclientjsGetAsset(appID int, apiKey, assetBaseID, assetID, resolution stri
 		// model_search, scene_search, etc
 		tempDir = filepath.Join(tempDir, fmt.Sprintf("%s_search", assetData.AssetType))
 		searchData := SearchTaskData{
-			AppID:          appID,
-			AddonVersion:   targetSoftware.AddonVersion,
-			BlenderVersion: targetSoftware.Version,
-			TempDir:        tempDir,
+			AppID:        appID,
+			AddonVersion: targetSoftware.AddonVersion,
+			TempDir:      tempDir,
+		}
+		// Version decides webp thumbnails, but only a Blender version has that meaning.
+		if targetSoftware.Name == blender {
+			searchData.BlenderVersion = targetSoftware.Version
 		}
 		searchResults := SearchResults{
 			Results: []Asset{assetData},
@@ -3876,7 +3924,7 @@ func bkclientjsGetAsset(appID int, apiKey, assetBaseID, assetID, resolution stri
 		return
 	}
 
-	// OTHER SOFTWARES - JUST GODOT NOW
+	// /godot/report add-ons -> Client downloads the asset itself
 	sceneID := uuid.New().String()
 	// Use the resolution requested by the browser, unless the software overrides it
 	// (e.g. Godot add-on pinning a project-wide resolution preference).
@@ -4126,25 +4174,8 @@ func monitorAvailableSoftwares() {
 		now := time.Now()
 		for i := range AvailableSoftwares {
 			software := AvailableSoftwares[i]
-			// Non-Blender SW (like Godot add-on) isn't always able to
-			// unsubscribe on shutdown, so we rely on missed heartbeats to detect
-			// disconnect.
-			//
-			// The time between heartbeats can be tens of seconds in extreme
-			// conditions. For example, Godot Timers can take up to 12 s to
-			// fire when the window is suspended on Wayland (not visible on a monitor).
-			//
-			// 60 s tolerance gives a 5x safety margin while still cleaning up
-			// within a reasonable time when the software truly exits.
-			// This could be aligned with Blender's 120 s tolerance, there is little to
-			// no harm in client exiting few minutes after being used.
-			tolerance := 60 * time.Second
-			// Blender add-on unsubscribes itself explicitly, so only remove it after longer time.
-			if software.Name == blender {
-				tolerance = 120 * time.Second
-			}
 			inactive := now.Sub(software.lastTimeConnected)
-			if inactive < tolerance {
+			if inactive < inactivityTolerance(software) {
 				continue // Software is active
 			}
 
@@ -4161,6 +4192,26 @@ func monitorAvailableSoftwares() {
 		}
 		AvailableSoftwaresMux.Unlock()
 	}
+}
+
+// inactivityTolerance returns how long software may stay silent before it is unsubscribed.
+func inactivityTolerance(software Software) time.Duration {
+	// /report add-ons (Blender, ...) unsubscribe themselves explicitly, so only remove them after longer time.
+	if software.protocol == protocolReport {
+		return 120 * time.Second
+	}
+	// /godot/report add-ons aren't always able to unsubscribe on shutdown,
+	// so we rely on missed heartbeats to detect disconnect.
+	//
+	// The time between heartbeats can be tens of seconds in extreme
+	// conditions. For example, Godot Timers can take up to 12 s to
+	// fire when the window is suspended on Wayland (not visible on a monitor).
+	//
+	// 60 s tolerance gives a 5x safety margin while still cleaning up
+	// within a reasonable time when the software truly exits.
+	// This could be aligned with Blender's 120 s tolerance, there is little to
+	// no harm in client exiting few minutes after being used.
+	return 60 * time.Second
 }
 
 // When software sends data to Client, we want to update the details in AvailableSoftwares map.
@@ -4207,6 +4258,7 @@ func godotReportHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error parsing JSON: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	data.protocol = protocolGodotReport
 	new := updateAvailableSoftware(data)
 
 	TasksMux.Lock()
