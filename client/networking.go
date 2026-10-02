@@ -32,39 +32,6 @@ import (
 	"github.com/rapid7/go-get-proxied/proxy"
 )
 
-// Handler for the index of the Client.
-// In future we can add here links to /debug or other useful endpoints.
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/favicon.ico" { // Browsers request this automatically; answer quietly without warning.
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.URL.Path != "/" { // Go handles "/" path as catchall, so refusing non-index stuff here
-		BKLog.Printf("%v Access to unknown path: %v", EmoWarning, r.URL.Path)
-		http.Error(w, "Not found: "+r.URL.Path, http.StatusNotFound)
-		return
-	}
-	pid := os.Getpid()
-	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprintf(w, `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Blendkit-Client</title>
-</head>
-<body>
-	<h1>Blendkit-Client</h1>
-	<div>Client PID: %d</div>
-	<div>Client Version: v%s</div>
-	<div>Platform: %s</div>
-	<div>System ID: %s</div>
-	<div>Started from %s add-on: v%s</div>
-</body>
-</html>`, pid, ClientVersion, GetPlatformVersion(), *SystemID, *StartingSoftwareName, *StartingAddonVersion)
-}
-
 // CreateHTTPClients creates HTTP clients with proxy settings, assings them to global variables.
 // Handles errors gracefully - if any error occurs setting up proxy, it will just default to no proxy.
 func CreateHTTPClients(proxyURL, proxyWhich, sslContext, trustedCACerts string) {

@@ -2,7 +2,7 @@
 
 > Generated from `internal/apispec` by `cmd/apidocgen`. Do not edit by hand.
 
-**Client version:** `1.13.2`
+**Client version:** `1.13.3`
 
 The Client is a local HTTP server (default port **62485**) that bridges Blendkit DCC add-ons (Blender, Godot, and embedders such as Maya and Rhino) with the Blendkit web service.
 
@@ -143,7 +143,7 @@ A machine-readable [OpenAPI 3.1 spec](openapi.json) is generated alongside this 
 
 #### `GET /`
 
-Returns a small HTML page with the Client PID, version, platform, system ID and the add-on that started it. Any non-root path returns 404.
+Returns a human-readable HTML status page with the Client PID, version, platform, system ID and the add-on that started it, plus the connected softwares (fetched from /addons/list) with buttons to disconnect a software (/addons/unsubscribe) or quit the Client (/shutdown). Opened from the tray icon's "Open Client Status" item. Any non-root path returns 404.
 
 - **Handler:** `indexHandler`
 

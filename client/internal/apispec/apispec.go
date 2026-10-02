@@ -71,7 +71,7 @@ func Routes() []Route {
 		{
 			Path: "/", Methods: []string{"GET"}, Versioned: false, Tag: "core",
 			Summary:     "Client status page",
-			Description: "Returns a small HTML page with the Client PID, version, platform, system ID and the add-on that started it. Any non-root path returns 404.",
+			Description: "Returns a human-readable HTML status page with the Client PID, version, platform, system ID and the add-on that started it, plus the connected softwares (fetched from /addons/list) with buttons to disconnect a software (/addons/unsubscribe) or quit the Client (/shutdown). Opened from the tray icon's \"Open Client Status\" item. Any non-root path returns 404.",
 			Handler:     "indexHandler",
 		},
 		{
