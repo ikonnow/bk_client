@@ -105,9 +105,13 @@ func validSystemID(s string) bool {
 // systemIDFilePath mirrors the add-on's paths.get_system_id_filepath().
 func systemIDFilePath() string {
 	if GlobalDir != "" {
-		return filepath.Join(GlobalDir, "system_id")
+		return filepath.Join(GlobalDir, "client", "system_id")
 	}
-	return defaultSystemIDFilePath()
+	legacy := defaultSystemIDFilePath()
+	if legacy == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(legacy), "client", "system_id")
 }
 
 func defaultSystemIDFilePath() string {
@@ -180,9 +184,16 @@ func resolveSystemID(override, nodeID string) string {
 	if persisted := persistedSystemID(); persisted != "" {
 		return persisted
 	}
-	if systemIDFilePath() != defaultSystemIDFilePath() {
-		if legacy := readSystemID(defaultSystemIDFilePath()); legacy != "" {
-			nodeID = legacy
+	if path := systemIDFilePath(); path != "" {
+		legacyPaths := []string{filepath.Join(filepath.Dir(filepath.Dir(path)), "system_id")}
+		if legacy := defaultSystemIDFilePath(); legacy != "" {
+			legacyPaths = append(legacyPaths, filepath.Join(filepath.Dir(legacy), "client", "system_id"), legacy)
+		}
+		for _, legacyPath := range legacyPaths {
+			if legacy := readSystemID(legacyPath); legacy != "" {
+				nodeID = legacy
+				break
+			}
 		}
 	}
 	if err := persistSystemID(nodeID); err != nil {

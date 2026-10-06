@@ -219,7 +219,7 @@ func TestResolveSystemID(t *testing.T) {
 	setTestGlobalDir(t, "")
 	dir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dir)
-	path := filepath.Join(dir, "blenderkit_data", "system_id")
+	path := filepath.Join(dir, "blenderkit_data", "client", "system_id")
 	const node = "000000000000042"
 
 	if got := resolveSystemID("000000000000007", node); got != "000000000000007" {
@@ -285,13 +285,18 @@ func TestPersistedSystemIDWithoutHome(t *testing.T) {
 }
 
 func TestResolveSystemIDConfiguredPath(t *testing.T) {
-	for _, scenario := range []string{"fresh", "legacy", "configured", "corrupt legacy"} {
+	for _, scenario := range []string{"fresh", "legacy", "configured", "corrupt legacy", "previous configured", "default client"} {
 		t.Run(scenario, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("XDG_DATA_HOME", filepath.Join(root, "home"))
-			configured := filepath.Join(root, "custom assets", "system_id")
-			setTestGlobalDir(t, filepath.Dir(configured))
+			setTestGlobalDir(t, filepath.Join(root, "custom assets"))
+			configured := filepath.Join(GlobalDir, "client", "system_id")
 			legacy := defaultSystemIDFilePath()
+			if scenario == "previous configured" {
+				legacy = filepath.Join(GlobalDir, "system_id")
+			} else if scenario == "default client" {
+				legacy = filepath.Join(filepath.Dir(legacy), "client", "system_id")
+			}
 			want := "000000000000042"
 			if scenario != "fresh" {
 				if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
@@ -327,6 +332,28 @@ func TestResolveSystemIDConfiguredPath(t *testing.T) {
 				t.Fatalf("legacy ID must be preserved: %q, %v", content, err)
 			}
 		})
+	}
+}
+
+func TestResolveSystemIDLegacyDefaultPath(t *testing.T) {
+	setTestGlobalDir(t, "")
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	legacy := defaultSystemIDFilePath()
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const existing = "000000000000123"
+	if err := os.WriteFile(legacy, []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveSystemID("", "000000000000042"); got != existing {
+		t.Fatalf("got %q; want %q", got, existing)
+	}
+	if got := persistedSystemID(); got != existing {
+		t.Fatalf("migrated ID: %q; want %q", got, existing)
+	}
+	if content, err := os.ReadFile(legacy); err != nil || string(content) != existing {
+		t.Fatalf("legacy ID must be preserved: %q, %v", content, err)
 	}
 }
 
