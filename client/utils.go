@@ -104,6 +104,13 @@ func validSystemID(s string) bool {
 
 // systemIDFilePath mirrors the add-on's paths.get_system_id_filepath().
 func systemIDFilePath() string {
+	if GlobalDir != "" {
+		return filepath.Join(GlobalDir, "system_id")
+	}
+	return defaultSystemIDFilePath()
+}
+
+func defaultSystemIDFilePath() string {
 	home := os.Getenv("XDG_DATA_HOME")
 	if home == "" {
 		var err error
@@ -118,7 +125,10 @@ func systemIDFilePath() string {
 // persistedSystemID returns the machine ID stored in the data directory, or "" when
 // the file is absent or holds anything but 15 digits.
 func persistedSystemID() string {
-	path := systemIDFilePath()
+	return readSystemID(systemIDFilePath())
+}
+
+func readSystemID(path string) string {
 	if path == "" {
 		return ""
 	}
@@ -170,8 +180,13 @@ func resolveSystemID(override, nodeID string) string {
 	if persisted := persistedSystemID(); persisted != "" {
 		return persisted
 	}
+	if systemIDFilePath() != defaultSystemIDFilePath() {
+		if legacy := readSystemID(defaultSystemIDFilePath()); legacy != "" {
+			nodeID = legacy
+		}
+	}
 	if err := persistSystemID(nodeID); err != nil {
-		BKLog.Printf("%s Could not persist system_id, reporting the MAC-derived ID: %v", EmoWarning, err)
+		BKLog.Printf("%s Could not persist system_id, reporting the resolved ID: %v", EmoWarning, err)
 	}
 	return nodeID
 }
