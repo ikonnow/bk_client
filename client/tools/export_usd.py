@@ -1413,6 +1413,9 @@ def export_to_usd(
     Returns:
       The path Maya should load: the <stem>.usda wrapper when MaterialX
       references were written, otherwise the plain out_usd crate.
+
+    Raises:
+      ValueError: If ``normal_map_target`` is not supported.
     """
     if normal_map_target not in ("preserve", "directx"):
         raise ValueError(f"Unsupported normal_map_target: {normal_map_target!r}")
