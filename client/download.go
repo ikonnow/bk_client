@@ -534,7 +534,10 @@ func downloadAssetSources(urls []string, filePath string, uploadFileSize int, ap
 		percentage := 0
 		message := "Downloading"
 		if total > 0 {
-			percentage = min(100, int(100*downloaded/total))
+			percentage = int(100 * downloaded / total)
+			if percentage > 100 {
+				percentage = 100
+			}
 			message = fmt.Sprintf("Downloading %.1fMB (%d%%)", float64(total)/1024/1024, percentage)
 		} else if downloaded > 0 {
 			message = fmt.Sprintf("Downloaded %.1fMB", float64(downloaded)/1024/1024)
