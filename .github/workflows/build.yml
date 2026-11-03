@@ -519,7 +519,7 @@ jobs:
         run: test -f $HOME/blender/blender || echo "BLENDER_BINARY_MISSING=true" >> $GITHUB_OUTPUT
       - name: Download Blender
         if: steps.blenderBinaryCheck.outputs.BLENDER_BINARY_MISSING == 'true'
-        run: curl -fL ${{ matrix.download_url }} -o $HOME/blender.tar.xz
+        run: curl -fL --retry 3 --retry-all-errors --retry-delay 5 --connect-timeout 20 "${{ matrix.download_url }}" -o "$HOME/blender.tar.xz"
       - name: Mkdir
         run: mkdir {$HOME/.local/bin,$HOME/blender} -p
       - name: Extract Blender
@@ -582,7 +582,7 @@ jobs:
         run: test -f $HOME/blender/blender || echo "BLENDER_BINARY_MISSING=true" >> $GITHUB_OUTPUT
       - name: Download Blender
         if: steps.blenderBinaryCheck.outputs.BLENDER_BINARY_MISSING == 'true'
-        run: curl -fL ${{ matrix.download_url }} -o $HOME/blender.tar.xz
+        run: curl -fL --retry 3 --retry-all-errors --retry-delay 5 --connect-timeout 20 "${{ matrix.download_url }}" -o "$HOME/blender.tar.xz"
       - name: Extract Blender
         if: steps.blenderBinaryCheck.outputs.BLENDER_BINARY_MISSING == 'true'
         run: tar -xf $HOME/blender.tar.xz -C $HOME/blender --strip-components=1
@@ -643,7 +643,7 @@ jobs:
         run: test -f $HOME/blender/blender || echo "BLENDER_BINARY_MISSING=true" >> $GITHUB_OUTPUT
       - name: Download Blender
         if: steps.blenderBinaryCache.outputs.cache-hit != 'true'
-        run: curl -fL ${{ matrix.download_url }} -o $HOME/blender.tar.xz
+        run: curl -fL --retry 3 --retry-all-errors --retry-delay 5 --connect-timeout 20 "${{ matrix.download_url }}" -o "$HOME/blender.tar.xz"
       - name: Extract Blender
         if: steps.blenderBinaryCache.outputs.cache-hit != 'true'
         run: tar -xf $HOME/blender.tar.xz -C $HOME/blender --strip-components=1
