@@ -19,6 +19,9 @@ Recipe ABI:
                                           reference them from the .usd
                                           (via the vendored bk_mtlx exporter;
                                           skipped if MaterialX is unavailable)
+        normal_map_target : str (optional, default "preserve") - normal-map
+                                          convention for the exported MaterialX
+                                          graphs ("preserve" or "directx")
 
 Stdout protocol (consumed by bk_maya.core.blender_runner)::
     BK_STATUS   <stage>
@@ -955,7 +958,116 @@ def _fix_mtlx_normal_maps(mtlx_path: str) -> int:
     return fixed
 
 
-def export_materialx_sidecar(out_usd: str) -> dict:
+def _convert_mtlx_normal_maps_to_directx(mtlx_path: str) -> int:
+    """Flip the green channel of each connected tangent-space normal map.
+
+    Blender's tangent-space normal maps use the OpenGL convention. MaterialX
+    has no portable per-map convention flag, so express the DirectX conversion
+    in the graph as ``G = 1 - G`` without modifying shared texture files.
+    """
+    try:
+        # Parsing our own generated, trusted .mtlx (not untrusted input).
+        tree = ET.parse(mtlx_path)  # noqa: S314  # nosec B314
+    except (ET.ParseError, OSError) as exc:
+        log(f"mtlx-normal: could not parse {os.path.basename(mtlx_path)} ({exc})")
+        return 0
+
+    root = tree.getroot()
+    converted = 0
+    for graph in root.iter("nodegraph"):
+        existing_names = {node.get("name") for node in graph if node.get("name")}
+        for node in list(graph):
+            if node.tag != "normalmap":
+                continue
+            normal_input = node.find("input[@name='in']")
+            if normal_input is None:
+                continue
+            source_name = normal_input.get("nodename")
+            if not source_name:
+                continue
+
+            source_node = next(
+                (child for child in graph if child.get("name") == source_name),
+                None,
+            )
+            if (
+                source_node is not None
+                and source_node.tag == "combine3"
+                and source_name.startswith("bk_dx_normal_combine_")
+            ):
+                continue
+
+            index = converted
+            while True:
+                separate_name = f"bk_dx_normal_separate_{index}"
+                subtract_name = f"bk_dx_normal_subtract_{index}"
+                combine_name = f"bk_dx_normal_combine_{index}"
+                if not ({separate_name, subtract_name, combine_name} & existing_names):
+                    break
+                index += 1
+            existing_names.update((separate_name, subtract_name, combine_name))
+
+            separate = ET.Element(
+                "separate3",
+                {"name": separate_name, "type": "multioutput", "nodedef": "ND_separate3_vector3"},
+            )
+            separate_input = ET.SubElement(
+                separate,
+                "input",
+                {"name": "in", "type": "vector3", "nodename": source_name},
+            )
+            source_output = normal_input.get("output")
+            if source_output:
+                separate_input.set("output", source_output)
+
+            subtract = ET.Element(
+                "subtract",
+                {"name": subtract_name, "type": "float", "nodedef": "ND_subtract_float"},
+            )
+            ET.SubElement(subtract, "input", {"name": "in1", "type": "float", "value": "1"})
+            ET.SubElement(
+                subtract,
+                "input",
+                {"name": "in2", "type": "float", "nodename": separate_name, "output": "outy"},
+            )
+
+            combine = ET.Element(
+                "combine3",
+                {"name": combine_name, "type": "vector3", "nodedef": "ND_combine3_vector3"},
+            )
+            ET.SubElement(
+                combine,
+                "input",
+                {"name": "in1", "type": "float", "nodename": separate_name, "output": "outx"},
+            )
+            ET.SubElement(
+                combine,
+                "input",
+                {"name": "in2", "type": "float", "nodename": subtract_name, "output": "out"},
+            )
+            ET.SubElement(
+                combine,
+                "input",
+                {"name": "in3", "type": "float", "nodename": separate_name, "output": "outz"},
+            )
+
+            node_index = list(graph).index(node)
+            graph.insert(node_index, separate)
+            graph.insert(node_index + 1, subtract)
+            graph.insert(node_index + 2, combine)
+            normal_input.set("nodename", combine_name)
+            normal_input.attrib.pop("output", None)
+            converted += 1
+
+    if converted:
+        with contextlib.suppress(AttributeError):
+            ET.indent(tree, space="  ")
+        tree.write(mtlx_path, encoding="unicode", xml_declaration=True)
+        log(f"mtlx-normal: converted {converted} tangent-space normal map(s) to DirectX")
+    return converted
+
+
+def export_materialx_sidecar(out_usd: str, *, normal_map_target: str = "preserve") -> dict:
     """Export one ``.mtlx`` per used material next to *out_usd*.
 
     Layout (all relative to the .usd directory)::
@@ -979,6 +1091,8 @@ def export_materialx_sidecar(out_usd: str) -> dict:
 
     exporter = _load_mtlx_exporter()
     if exporter is None:
+        if normal_map_target == "directx":
+            log("mtlx-normal: DirectX conversion unavailable because MaterialX export is unavailable")
         return mapping
 
     mapping["materialx_available"] = True
@@ -1034,6 +1148,8 @@ def export_materialx_sidecar(out_usd: str) -> dict:
             if entry["success"]:
                 exported += 1
                 _fix_mtlx_normal_maps(out_path)
+                if normal_map_target == "directx":
+                    _convert_mtlx_normal_maps_to_directx(out_path)
         except Exception as exc:  # never let one material abort the recipe
             entry["error"] = str(exc)
             log(f"mtlx: FAILED for {mat.name!r}: {exc}")
@@ -1277,6 +1393,7 @@ def export_to_usd(
     *,
     export_mtlx: bool = True,
     mtlx_references: bool = True,
+    normal_map_target: str = "preserve",
 ) -> str:
     """Export a .blend to .usd with the necessary pre-processing for Maya compatibility.
 
@@ -1290,11 +1407,16 @@ def export_to_usd(
       mtlx_references: when the sidecar .mtlx exist, make the USD reference them
         (geometry goes to the <stem>.usd crate + a thin <stem>.usda composes it)
         instead of Blender's inline MaterialX network
+      normal_map_target: "directx" flips tangent-space normal-map green channels
+        in the MaterialX sidecars; "preserve" leaves their convention unchanged
 
     Returns:
       The path Maya should load: the <stem>.usda wrapper when MaterialX
       references were written, otherwise the plain out_usd crate.
     """
+    if normal_map_target not in ("preserve", "directx"):
+        raise ValueError(f"Unsupported normal_map_target: {normal_map_target!r}")
+
     status("Opening blend")
     bpy.ops.wm.open_mainfile(filepath=blend_path)
     progress(0.05, "Opening blend")
@@ -1335,7 +1457,7 @@ def export_to_usd(
     if export_mtlx:
         status("Exporting MaterialX")
         try:
-            mtlx_mapping = export_materialx_sidecar(out_usd)
+            mtlx_mapping = export_materialx_sidecar(out_usd, normal_map_target=normal_map_target)
         except Exception as exc:  # never let mtlx failure abort the USD export
             log(f"mtlx: sidecar export failed (non-fatal): {exc}")
         progress(0.60, "MaterialX exported")
@@ -1485,6 +1607,7 @@ def main() -> int:
             asset_id=str(params.get("asset_id") or ""),
             export_mtlx=bool(params.get("export_mtlx", True)),
             mtlx_references=bool(params.get("mtlx_references", True)),
+            normal_map_target=str(params.get("normal_map_target") or "preserve"),
         )
     except Exception as exc:
         error(f"export failed: {exc}")
