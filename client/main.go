@@ -1559,7 +1559,7 @@ func DownloadPrxc(t *Task, wg *sync.WaitGroup) {
 
 	// Get signed URL
 	file := AssetFile{DownloadURL: data.DownloadURL}
-	_, signedURL, _, err := GetSignedURL(data.SceneUUID, file, data.APIKey, data.AddonVersion, data.PlatformVersion, t.AppID)
+	urls, _, err := GetSignedURLs(t.Ctx, data.SceneUUID, file, data.APIKey, data.AddonVersion, data.PlatformVersion, t.AppID)
 	if err != nil {
 		t.Status = "error"
 		t.Message = "failed to get signed URL for prxc"
@@ -1568,51 +1568,11 @@ func DownloadPrxc(t *Task, wg *sync.WaitGroup) {
 		return
 	}
 
-	// Download the file
-	req, err := http.NewRequest("GET", signedURL, nil)
-	if err != nil {
-		t.Status = "error"
-		t.Message = "error creating prxc request"
-		t.Error = err
-		AddTaskCh <- t
-		return
-	}
-
-	headers := getHeaders(data.APIKey, *SystemID, data.AddonVersion, data.PlatformVersion, t.AppID)
-	req.Header = headers
-
-	resp, err := ClientAPI.Do(req)
-	if err != nil {
+	headers := getHeaders("", *SystemID, data.AddonVersion, data.PlatformVersion, t.AppID)
+	if _, err := downloadFromSources(t.Ctx, ClientDownloads, urls, data.FilePath, 0, headers, nil); err != nil {
 		t.Status = "error"
 		t.Message = "error downloading prxc"
 		t.Error = fmt.Errorf("error downloading prxc: %w", err)
-		AddTaskCh <- t
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Status = "error"
-		t.Message = fmt.Sprintf("prxc download returned status %d", resp.StatusCode)
-		t.Error = fmt.Errorf("prxc download returned status %d", resp.StatusCode)
-		AddTaskCh <- t
-		return
-	}
-
-	outFile, err := os.Create(data.FilePath)
-	if err != nil {
-		t.Status = "error"
-		t.Message = "error creating prxc file"
-		t.Error = fmt.Errorf("error creating prxc file: %w", err)
-		AddTaskCh <- t
-		return
-	}
-	defer outFile.Close()
-
-	if _, err := io.Copy(outFile, resp.Body); err != nil {
-		t.Status = "error"
-		t.Message = "error writing prxc file"
-		t.Error = fmt.Errorf("error writing prxc file: %w", err)
 		AddTaskCh <- t
 		return
 	}
@@ -1832,20 +1792,26 @@ func GetDownloadURLWrapper(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	canDownload, URL, _, err := GetDownloadURL(data.Preferences.SceneID, data.DownloadAssetData.Files, data.Preferences.Resolution, data.Preferences.APIKey, data.AddonVersion, data.PlatformVersion, data.AppID)
+	file, _ := GetResolutionFile(data.DownloadAssetData.Files, data.Preferences.Resolution)
+	urls, _, err := GetSignedURLs(r.Context(), data.Preferences.SceneID, file, data.Preferences.APIKey, data.AddonVersion, data.PlatformVersion, data.AppID)
 	if err != nil {
 		http.Error(w, "Error getting download URL: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	fileName, err := ExtractFilenameFromURL(URL)
+	fileName, err := ExtractFilenameFromURL(urls[0])
 	if err != nil {
 		http.Error(w, "Error extracting filename from URL: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	URL, err := selectReachableDownloadURL(r.Context(), ClientDownloads, urls, getHeaders("", *SystemID, data.AddonVersion, data.PlatformVersion, data.AppID))
+	if err != nil {
+		http.Error(w, "Error checking download URLs: "+err.Error(), http.StatusBadGateway)
+		return
+	}
 
 	responseJSON, err := json.Marshal(map[string]interface{}{
-		"can_download": canDownload,
+		"can_download": true,
 		"download_url": URL,
 		"filename":     fileName,
 	})
@@ -3936,18 +3902,14 @@ func bkclientjsGetAsset(appID int, apiKey, assetBaseID, assetID, resolution stri
 		res = targetSoftware.Resolution
 	}
 	selectedFile, _ := selectAssetFile(assetData.Files, assetData.AssetType, targetSoftware.ModelFormat, res)
-	canDownload, downloadURL, _, err := GetSignedURL(sceneID, selectedFile, apiKey, targetSoftware.AddonVersion, "", appID)
+	downloadURLs, fileSize, err := GetSignedURLs(context.Background(), sceneID, selectedFile, apiKey, targetSoftware.AddonVersion, "", appID)
 	if err != nil {
 		BKLog.Printf("%s GetDownloadURL error %v", EmoBKClientJS, err)
 		return
 	}
-	if !canDownload {
-		BKLog.Println("Cannot download asset")
-		return
-	}
 
 	// TODO: Here we need to define human readable name for GLTF
-	fileName, err := ExtractFilenameFromURL(downloadURL)
+	fileName, err := ExtractFilenameFromURL(downloadURLs[0])
 	if err != nil {
 		BKLog.Printf("%s ExtractFilenameFromURL error %v", EmoBKClientJS, err)
 		return
@@ -4000,111 +3962,11 @@ func bkclientjsGetAsset(appID int, apiKey, assetBaseID, assetID, resolution stri
 		}
 	}
 
-	file, err := os.Create(downloadPath)
-	if err != nil {
-		TaskErrorCh <- &TaskError{AppID: appID, TaskID: taskID, Error: fmt.Errorf("error creating file: %w", err)}
+	if _, err := downloadAssetSources(downloadURLs, downloadPath, fileSize, appID, targetSoftware.AddonVersion, "", taskID, dlTask.Ctx); err != nil {
+		TaskErrorCh <- &TaskError{AppID: appID, TaskID: taskID, Error: err}
 		return
 	}
-	defer file.Close()
-	fmt.Println("-> file has been created")
-
-	req, err := http.NewRequest("GET", downloadURL, nil)
-	if err != nil {
-		fmt.Println("Error creating request:", err)
-		return
-	}
-	req.Header = getHeaders("", *SystemID, targetSoftware.AddonVersion, "", appID)
-	fmt.Println("-> making the request")
-	resp, err := ClientDownloads.Do(req)
-	if err != nil {
-		e := DeleteFile(downloadPath)
-		if e != nil {
-			fmt.Printf("request failed: %v, failed to delete file: %v", err, e)
-		}
-		TaskErrorCh <- &TaskError{AppID: appID, TaskID: taskID, Error: fmt.Errorf("request failed: %w", err)}
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		_, respString, _ := ParseFailedHTTPResponse(resp)
-		httpErr := fmt.Errorf("server returned non-OK status (%d): %s", resp.StatusCode, respString)
-		e := DeleteFile(downloadPath)
-		if e != nil {
-			fmt.Printf("%v, failed to delete file: %v", httpErr, e)
-		}
-		TaskErrorCh <- &TaskError{AppID: appID, TaskID: taskID, Error: httpErr}
-		return
-	}
-
-	totalLength := resp.Header.Get("Content-Length")
-	if totalLength == "" {
-		e := DeleteFile(downloadPath)
-		if e != nil {
-			fmt.Printf("failed to delete file: %v", e)
-		}
-		TaskErrorCh <- &TaskError{AppID: appID, TaskID: taskID, Error: fmt.Errorf("Content-Length header is missing")}
-		return
-	}
-
-	fileSize, err := strconv.ParseInt(totalLength, 10, 64)
-	if err != nil {
-		e := DeleteFile(downloadPath)
-		if e != nil {
-			fmt.Printf("length conversion failed: %v, failed to delete file: %v", err, e)
-		}
-		TaskErrorCh <- &TaskError{AppID: appID, TaskID: taskID, Error: fmt.Errorf("length conversion failed: %w", err)}
-		return
-	}
-
-	// Setup for monitoring progress and cancellation
-	sizeInMB := float64(fileSize) / 1024 / 1024
-	var downloaded int64 = 0
-	progress := make(chan int64)
-	go func() {
-		for p := range progress {
-			pct := int(100 * p / fileSize)
-			var downloadMessage string
-			if sizeInMB < 1 { // If the size is less than 1MB, show in KB
-				downloadMessage = fmt.Sprintf("Downloading %dkB (%d%%)", int(sizeInMB*1024), pct)
-			} else { // If the size is not a whole number, show one decimal place
-				downloadMessage = fmt.Sprintf("Downloading %.1fMB (%d%%)", sizeInMB, pct)
-			}
-			TaskProgressUpdateCh <- &TaskProgressUpdate{AppID: appID, TaskID: taskID, Progress: pct, Message: downloadMessage}
-		}
-	}()
-
-	buffer := make([]byte, 32*1024) // 32KB buffer
-	for {
-		n, readErr := resp.Body.Read(buffer)
-		if n > 0 {
-			_, writeErr := file.Write(buffer[:n])
-			if writeErr != nil {
-				close(progress)
-				err = DeleteFile(downloadPath) // Clean up; ignore error from DeleteFile to focus on writeErr
-				if err != nil {
-					fmt.Printf("%v, failed to delete file: %v", writeErr, err)
-				}
-				TaskErrorCh <- &TaskError{AppID: appID, TaskID: taskID, Error: writeErr}
-				return
-			}
-			downloaded += int64(n)
-			progress <- downloaded
-		}
-		if readErr != nil {
-			close(progress)
-			if readErr == io.EOF {
-				TaskFinishCh <- &TaskFinish{AppID: appID, TaskID: taskID, Message: "downloaded", Result: map[string]string{"file_path": downloadPath}}
-				return // Download completed successfully
-			}
-			err := DeleteFile(downloadPath) // Clean up; ignore error from DeleteFile to focus on readErr
-			if err != nil {
-				fmt.Printf("%v, failed to delete file: %v", readErr, err)
-			}
-			TaskErrorCh <- &TaskError{AppID: appID, TaskID: taskID, Error: readErr}
-			return
-		}
-	}
+	TaskFinishCh <- &TaskFinish{AppID: appID, TaskID: taskID, Message: "downloaded", Result: map[string]string{"file_path": downloadPath}}
 }
 
 // Get data for single Asset instance by assetBaseID via Search on the API - as advised by Petr.

@@ -4,6 +4,31 @@ This is a Client for Blendkit (previously daemon).
 It's a local server that listens for requests from Blendkit add-ons and processes them.
 Written in Go.
 
+## Remote download fallback
+
+Signed download metadata accepts an ordered `filePaths: [{"url": "..."}]`
+list and the legacy `filePath` string. The Client deduplicates candidates and
+retains the legacy URL as a final candidate if it is not already in the list.
+
+Client-owned asset downloads (including Blender, browser-triggered software
+downloads, and `.prxc` files) try the candidates sequentially. Connection and
+read failures, HTTP 403/404/408, and server errors advance to the next source.
+Cancellation, local filesystem failures, and HTTP 429 stop the operation.
+Transfers have a 30-second stalled-response timeout in addition to the configured
+HTTP client timeout. Partial files are cleaned up; only completed files are
+renamed into the destination. Retries restart from zero.
+
+The URL-only `/wrappers/get_download_url` endpoint keeps its existing response
+shape. It checks candidates with HEAD, falling back to a one-byte range GET for
+HTTP 403/405/501, and returns one reachable URL. Each probe has a five-second
+timeout and does not read the asset body. Reachability is not a guarantee that a
+later full download will succeed. The filename remains based on the first
+candidate, independent of which mirror succeeds.
+
+API authentication is used only for metadata requests, not CDN transfers or
+probes. Source errors identify candidate numbers without exposing signed URLs.
+Thumbnail format fallback remains separate.
+
 ## How is it run
 The Client is built for Windows, MacOS and Linux for both x86_64 and arm64.
 Blendkit-Client binaries are shipped in the blenderkit.zip file, in /client directory where normally in the repo Client's source code is placed.

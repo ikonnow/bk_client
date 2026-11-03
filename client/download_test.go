@@ -1,11 +1,273 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
+
+func TestDownloadSourcePublication(t *testing.T) {
+	for _, scenario := range []string{"replace existing", "retain existing", "local rename failure", "stalled primary"} {
+		t.Run(scenario, func(t *testing.T) {
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				requests.Add(1)
+				if scenario == "retain existing" {
+					writer.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				if scenario == "stalled primary" && request.URL.Path == "/primary" {
+					writer.Header().Set("Content-Length", "100")
+					writer.Write([]byte("partial"))
+					writer.(http.Flusher).Flush()
+					<-request.Context().Done()
+					return
+				}
+				writer.Write([]byte("complete asset"))
+			}))
+			defer server.Close()
+			directory := t.TempDir()
+			destination := filepath.Join(directory, "asset.blend")
+			if scenario == "local rename failure" {
+				if err := os.Mkdir(destination, 0700); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.WriteFile(destination, []byte("existing asset"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			client := server.Client()
+			if scenario == "stalled primary" {
+				client.Timeout = 100 * time.Millisecond
+			}
+			_, err := downloadFromSources(context.Background(), client, []string{server.URL + "/primary", server.URL + "/fallback"}, destination, 0, nil, nil)
+			if scenario == "local rename failure" {
+				if err == nil || requests.Load() != 1 {
+					t.Fatal("local publication failure retried or succeeded")
+				}
+			} else {
+				body, readErr := os.ReadFile(destination)
+				want := "complete asset"
+				if scenario == "retain existing" {
+					want = "existing asset"
+				}
+				if readErr != nil || string(body) != want || (err != nil) != (scenario == "retain existing") {
+					t.Fatalf("unexpected publication: body=%s, err=%v, readErr=%v", body, err, readErr)
+				}
+				if scenario == "stalled primary" && requests.Load() != 2 {
+					t.Fatal("stalled source did not advance to fallback")
+				}
+			}
+			partials, _ := filepath.Glob(filepath.Join(directory, ".blendkit-download-*"))
+			if len(partials) != 0 {
+				t.Fatalf("partial files left behind: %v", partials)
+			}
+		})
+	}
+}
+
+func TestDownloadURLWrapperFallback(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		name := "fallback"
+		if legacy {
+			name = "legacy"
+		}
+		t.Run(name, func(t *testing.T) {
+			var server *httptest.Server
+			server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if request.URL.Path == "/metadata" {
+					if request.Header.Get("Authorization") != "Bearer test-key" || request.URL.Query().Get("scene_uuid") != "scene" {
+						t.Error("metadata request lost authentication or scene ID")
+					}
+					response := map[string]interface{}{"filePath": server.URL + "/primary/canonical.blend?Signature=secret"}
+					if !legacy {
+						response["filePaths"] = []map[string]string{
+							{"url": server.URL + "/primary/canonical.blend?Signature=secret"},
+							{"url": server.URL + "/mirror/alternate.blend?Signature=secret"},
+						}
+					}
+					json.NewEncoder(writer).Encode(response)
+					return
+				}
+				if request.Method != http.MethodHead || request.Header.Get("Authorization") != "" {
+					t.Error("URL wrapper downloaded a body or leaked API authentication")
+				}
+				if !legacy && request.URL.Path == "/primary/canonical.blend" {
+					writer.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+			previousAPI, previousDownloads := ClientAPI, ClientDownloads
+			ClientAPI, ClientDownloads = server.Client(), server.Client()
+			t.Cleanup(func() { ClientAPI, ClientDownloads = previousAPI, previousDownloads })
+			data := DownloadData{
+				DownloadAssetData: DownloadAssetData{Files: []AssetFile{{FileType: "blend", DownloadURL: server.URL + "/metadata"}}},
+				Preferences:       PREFS{APIKey: "test-key", SceneID: "scene", Resolution: "ORIGINAL"},
+			}
+			body, err := json.Marshal(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			recorder := httptest.NewRecorder()
+			GetDownloadURLWrapper(recorder, httptest.NewRequest(http.MethodPost, "/wrappers/get_download_url", bytes.NewReader(body)))
+			var response struct {
+				CanDownload bool   `json:"can_download"`
+				URL         string `json:"download_url"`
+				Filename    string `json:"filename"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("invalid wrapper response (HTTP %d): %v", recorder.Code, err)
+			}
+			wantURL := server.URL + "/mirror/alternate.blend?Signature=secret"
+			if legacy {
+				wantURL = server.URL + "/primary/canonical.blend?Signature=secret"
+			}
+			if recorder.Code != http.StatusOK || !response.CanDownload || response.URL != wantURL || response.Filename != "canonical.blend" {
+				t.Fatal("wrapper contract or source selection changed unexpectedly")
+			}
+		})
+	}
+}
+
+func TestParseDownloadURLs(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{"legacy", `{"filePath":"https://primary/file.blend"}`, "https://primary/file.blend"},
+		{"ordered", `{"filePath":"https://primary/file.blend","filePaths":[{"url":"https://mirror/file.blend"},{"url":"https://primary/file.blend"},{"url":"https://mirror/file.blend"}]}`, "https://mirror/file.blend,https://primary/file.blend"},
+		{"empty", `{"filePath":"https://primary/file.blend","filePaths":[]}`, "https://primary/file.blend"},
+		{"invalid entries", `{"filePath":"https://primary/file.blend","filePaths":[{"url":""},{"url":"file:///tmp/asset"}]}`, "https://primary/file.blend"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			urls, err := parseDownloadURLs([]byte(test.body))
+			if err != nil || strings.Join(urls, ",") != test.want {
+				t.Fatalf("got %v, %v; want %s", urls, err, test.want)
+			}
+		})
+	}
+	if _, err := parseDownloadURLs([]byte(`{}`)); err == nil {
+		t.Fatal("expected error for missing URLs")
+	}
+}
+
+func TestDownloadFromSources(t *testing.T) {
+	for _, scenario := range []string{"http failure", "partial", "rate limit", "all fail", "local failure", "cancel", "cancel during transfer"} {
+		t.Run(scenario, func(t *testing.T) {
+			var requests []string
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				requests = append(requests, request.URL.Path)
+				if request.Header.Get("Authorization") != "" {
+					t.Error("authentication leaked to download host")
+				}
+				if (request.URL.Path == "/primary" && scenario != "cancel during transfer") || scenario == "all fail" {
+					switch scenario {
+					case "partial":
+						writer.Header().Set("Content-Length", "100")
+						writer.Write([]byte("partial"))
+					case "rate limit":
+						writer.WriteHeader(http.StatusTooManyRequests)
+					default:
+						writer.WriteHeader(http.StatusServiceUnavailable)
+					}
+					return
+				}
+				writer.Write([]byte("complete asset"))
+			}))
+			defer server.Close()
+			directory := t.TempDir()
+			destination := filepath.Join(directory, "asset.blend")
+			if scenario == "local failure" {
+				destination = filepath.Join(directory, "missing", "asset.blend")
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if scenario == "cancel" {
+				cancel()
+			}
+			progress := func(downloaded, total int64) {
+				if scenario == "cancel during transfer" && downloaded > 0 {
+					cancel()
+				}
+			}
+			used, err := downloadFromSources(ctx, server.Client(), []string{server.URL + "/primary?Signature=secret", server.URL + "/fallback"}, destination, 0, http.Header{"Authorization": {"Bearer secret"}}, progress)
+			if scenario == "http failure" || scenario == "partial" {
+				body, readErr := os.ReadFile(destination)
+				if err != nil || readErr != nil || string(body) != "complete asset" || used != server.URL+"/fallback" || len(requests) != 2 {
+					t.Fatalf("fallback failed: used=%s, err=%v, body=%s, requests=%v", used, err, body, requests)
+				}
+			} else {
+				if err == nil || strings.Contains(err.Error(), "secret") {
+					t.Fatalf("expected sanitized failure, got %v", err)
+				}
+				if _, statErr := os.Stat(destination); !os.IsNotExist(statErr) {
+					t.Fatal("failed download published a destination")
+				}
+				if (scenario == "rate limit" || scenario == "cancel during transfer") && len(requests) != 1 {
+					t.Fatal("rate limit or cancellation retried")
+				}
+				if (scenario == "local failure" || scenario == "cancel") && len(requests) != 0 {
+					t.Fatal("local failure or cancellation made a request")
+				}
+				if strings.HasPrefix(scenario, "cancel") && !errors.Is(err, context.Canceled) {
+					t.Fatalf("lost cancellation: %v", err)
+				}
+			}
+			partials, _ := filepath.Glob(filepath.Join(directory, ".blendkit-download-*"))
+			if len(partials) != 0 {
+				t.Fatalf("partial files left behind: %v", partials)
+			}
+		})
+	}
+}
+
+func TestSelectReachableDownloadURL(t *testing.T) {
+	for _, scenario := range []string{"head", "range", "rate limit", "all fail"} {
+		t.Run(scenario, func(t *testing.T) {
+			var requests []string
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				requests = append(requests, request.Method+" "+request.URL.Path)
+				if request.Header.Get("Authorization") != "" {
+					t.Error("authentication leaked to probe")
+				}
+				if scenario == "rate limit" {
+					writer.WriteHeader(http.StatusTooManyRequests)
+				} else if request.URL.Path == "/primary" || scenario == "all fail" {
+					writer.WriteHeader(http.StatusNotFound)
+				} else if scenario == "range" && request.Method == http.MethodHead {
+					writer.WriteHeader(http.StatusMethodNotAllowed)
+				} else if request.Method == http.MethodGet {
+					if request.Header.Get("Range") != "bytes=0-0" {
+						t.Error("probe did not request a bounded range")
+					}
+					writer.WriteHeader(http.StatusPartialContent)
+					writer.Write([]byte("x"))
+				}
+			}))
+			defer server.Close()
+			used, err := selectReachableDownloadURL(context.Background(), server.Client(), []string{server.URL + "/primary?Signature=secret", server.URL + "/fallback"}, http.Header{"Authorization": {"Bearer secret"}})
+			if scenario == "head" || scenario == "range" {
+				if err != nil || used != server.URL+"/fallback" {
+					t.Fatalf("probe failed: %v", err)
+				}
+			} else if err == nil || strings.Contains(err.Error(), "secret") {
+				t.Fatalf("expected sanitized probe failure, got %v", err)
+			}
+			if scenario == "rate limit" && len(requests) != 1 {
+				t.Fatal("rate limit retried")
+			}
+		})
+	}
+}
 
 func makeFile(fileType string) AssetFile {
 	return AssetFile{FileType: fileType, FileUploadSize: 100}
