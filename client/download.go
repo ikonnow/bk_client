@@ -220,7 +220,8 @@ func doAssetDownload(
 	TasksMux.Unlock()
 
 	// GET URL FOR BLEND FILE WITH CORRECT RESOLUTION
-	canDownload, downloadURL, fileUploadSize, err := GetDownloadURL(sceneID, downloadAssetData.Files, downloadAssetData.Resolution, apiKey, addonVersion, platformVersion, appID)
+	selectedFile, _ := GetResolutionFile(downloadAssetData.Files, downloadAssetData.Resolution)
+	downloadURLs, fileUploadSize, err := GetSignedURLs(task.Ctx, sceneID, selectedFile, apiKey, addonVersion, platformVersion, appID)
 	if err != nil {
 		TaskErrorCh <- &TaskError{
 			AppID:  appID,
@@ -228,13 +229,7 @@ func doAssetDownload(
 			Error:  err}
 		return
 	}
-	if !canDownload {
-		TaskErrorCh <- &TaskError{
-			AppID:  appID,
-			TaskID: taskID,
-			Error:  fmt.Errorf("user cannot download this file")}
-		return
-	}
+	downloadURL := downloadURLs[0]
 
 	// EXTRACT FILENAME FROM URL
 	TaskProgressUpdateCh <- &TaskProgressUpdate{
@@ -317,7 +312,7 @@ func doAssetDownload(
 	// START DOWNLOAD IF NEEDED
 	fp := downloadFilePaths[0]
 	if action == "download" {
-		err = downloadAsset(downloadURL, fp, fileUploadSize, appID, addonVersion, platformVersion, taskID, task.Ctx)
+		downloadURL, err = downloadAssetSources(downloadURLs, fp, fileUploadSize, appID, addonVersion, platformVersion, taskID, task.Ctx)
 		if err != nil {
 			e := fmt.Errorf("error downloading asset: %w", err)
 			TaskErrorCh <- &TaskError{
@@ -528,128 +523,28 @@ func UnpackAsset(
 }
 
 func downloadAsset(url, filePath string, uploadFileSize int, appID int, addonVersion, platformVersion, taskID string, ctx context.Context) error {
-	TaskProgressUpdateCh <- &TaskProgressUpdate{
-		AppID:    appID,
-		TaskID:   taskID,
-		Progress: 0,
-		Message:  "Downloading",
-	}
+	_, err := downloadAssetSources([]string{url}, filePath, uploadFileSize, appID, addonVersion, platformVersion, taskID, ctx)
+	return err
+}
 
-	file, err := os.Create(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return err
-	}
-
-	req.Header = getHeaders("", *SystemID, addonVersion, platformVersion, appID) // download requires no API key in headers
-	req.Header.Set("Cookie", "allow_compression=true")                           // allow compression (#1486)
-	resp, err := ClientDownloads.Do(req)
-	if err != nil {
-		e := DeleteFile(filePath)
-		if e != nil {
-			return fmt.Errorf("request failed: %w, failed to delete file: %w", err, e)
+func downloadAssetSources(urls []string, filePath string, uploadFileSize int, appID int, addonVersion, platformVersion, taskID string, ctx context.Context) (string, error) {
+	headers := getHeaders("", *SystemID, addonVersion, platformVersion, appID)
+	headers.Set("Cookie", "allow_compression=true")
+	progress := func(downloaded, total int64) {
+		percentage := 0
+		message := "Downloading"
+		if total > 0 {
+			percentage = min(100, int(100*downloaded/total))
+			message = fmt.Sprintf("Downloading %.1fMB (%d%%)", float64(total)/1024/1024, percentage)
+		} else if downloaded > 0 {
+			message = fmt.Sprintf("Downloaded %.1fMB", float64(downloaded)/1024/1024)
 		}
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		_, respString, _ := ParseFailedHTTPResponse(resp)
-		err := fmt.Errorf("server returned non-OK status (%d): %s", resp.StatusCode, respString)
-		e := DeleteFile(filePath)
-		if e != nil {
-			return fmt.Errorf("%w, failed to delete file: %w", err, e)
-		}
-		return err
-	}
-
-	fmt.Println("Response Headers:")
-	for name, values := range resp.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", name, value)
-		}
-	}
-
-	// Determine content length
-	var contentLength int64
-	fmt.Printf(">> uploadFileSize=%d\n", uploadFileSize)
-	fmt.Printf(">> resp.ContentLength=%d\n", resp.ContentLength)
-	if resp.ContentLength >= 0 { // Prefer the Content-Length from the HTTP response
-		contentLength = resp.ContentLength
-	} else { // If the response doesn't contain Content-Length, use the uploadFileSize from search results
-		contentLength = int64(uploadFileSize)
-	}
-
-	// Setup for monitoring progress and cancellation
-	sizeInMB := float64(contentLength) / 1024 / 1024
-	var downloaded int64 = 0
-	progress := make(chan int64)
-	go func() {
-		var downloadMessage string
-		for p := range progress {
-			var prog int
-			if contentLength <= 0 { // response didn't contain Content-Length info, so we cannot compute exact progress
-				prog = 66 // Show a fixed progress when we don't know the total size
-				downloadMessage = fmt.Sprintf("Downloaded %.1fMB of %.1fMB (compressed)", float64(p/1024/1024), sizeInMB)
-			} else if sizeInMB < 1 { // If the size is less than 1MB, show in KB
-				prog = int(100 * p / contentLength)
-				downloadMessage = fmt.Sprintf("Downloading %dkB (%d%%)", int(sizeInMB*1024), prog)
-			} else { // If the size is not a whole number, show one decimal place
-				prog = int(100 * p / contentLength)
-				downloadMessage = fmt.Sprintf("Downloading %.1fMB (%d%%)", sizeInMB, prog)
-			}
-			TaskProgressUpdateCh <- &TaskProgressUpdate{
-				AppID:    appID,
-				TaskID:   taskID,
-				Progress: prog,
-				Message:  downloadMessage,
-			}
-		}
-	}()
-
-	buffer := make([]byte, 32*1024) // 32KB buffer
-	for {
 		select {
+		case TaskProgressUpdateCh <- &TaskProgressUpdate{AppID: appID, TaskID: taskID, Progress: percentage, Message: message}:
 		case <-ctx.Done():
-			close(progress)
-			err = DeleteFile(filePath)
-			if err != nil {
-				return fmt.Errorf("%w, failed to delete file: %w", ctx.Err(), err)
-			}
-			return ctx.Err()
-		default:
-			n, readErr := resp.Body.Read(buffer)
-			if n > 0 {
-				_, writeErr := file.Write(buffer[:n])
-				if writeErr != nil {
-					close(progress)
-					err = DeleteFile(filePath) // Clean up; ignore error from DeleteFile to focus on writeErr
-					if err != nil {
-						return fmt.Errorf("%w, failed to delete file: %w", writeErr, err)
-					}
-					return writeErr
-				}
-				downloaded += int64(n)
-				progress <- downloaded
-			}
-			if readErr != nil {
-				close(progress)
-				if readErr == io.EOF {
-					return nil // Download completed successfully
-				}
-				err := DeleteFile(filePath) // Clean up; ignore error from DeleteFile to focus on readErr
-				if err != nil {
-					return fmt.Errorf("%w, failed to delete file: %w", readErr, err)
-				}
-				return readErr
-			}
 		}
 	}
+	return downloadFromSources(ctx, ClientDownloads, urls, filePath, int64(uploadFileSize), headers, progress)
 }
 
 // should return ['/Users/ag/blenderkit_data/models/kitten_0992088b-fb84-4c69-bb6e-426272970c8b/kitten_2K_d5368c9d-092e-4319-afe1-dd765de6da01.blend']
@@ -686,44 +581,41 @@ func GetDownloadFilepaths(downloadAssetData DownloadAssetData, downloadDirs []st
 // downloadURL - https://assets.blendkit.com/assets/.../file.blend?verify=...
 // fileUploadSize - size of the file to download
 func GetSignedURL(sceneID string, file AssetFile, apiKey, addonVersion, platformVersion string, appID int) (bool, string, int, error) {
+	urls, size, err := GetSignedURLs(context.Background(), sceneID, file, apiKey, addonVersion, platformVersion, appID)
+	if err != nil {
+		return false, "", 0, err
+	}
+	source, err := selectReachableDownloadURL(context.Background(), ClientDownloads, urls, getHeaders("", *SystemID, addonVersion, platformVersion, appID))
+	return err == nil, source, size, err
+}
+
+func GetSignedURLs(ctx context.Context, sceneID string, file AssetFile, apiKey, addonVersion, platformVersion string, appID int) ([]string, int, error) {
 	reqData := url.Values{}
 	reqData.Set("scene_uuid", sceneID)
 
-	req, err := http.NewRequest("GET", file.DownloadURL, nil) // file.DownloadURL is like https://blendkit.com/api/v1/download/123456789
+	req, err := http.NewRequestWithContext(ctx, "GET", file.DownloadURL, nil)
 	if err != nil {
-		return false, "", 0, err
+		return nil, 0, fmt.Errorf("invalid download metadata URL")
 	}
 	req.Header = getHeaders(apiKey, *SystemID, addonVersion, platformVersion, appID)
 	req.URL.RawQuery = reqData.Encode()
 
 	resp, err := ClientAPI.Do(req)
 	if err != nil {
-		return false, "", 0, err
+		return nil, 0, safeDownloadError(err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		_, respString, _ := ParseFailedHTTPResponse(resp)
-		return false, "", 0, fmt.Errorf("server returned non-OK status (%d): %s", resp.StatusCode, respString)
+		return nil, 0, fmt.Errorf("download metadata returned HTTP %d", resp.StatusCode)
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return false, "", 0, err
+		return nil, 0, err
 	}
-
-	var respJSON map[string]interface{}
-	err = json.Unmarshal(bodyBytes, &respJSON)
-	if err != nil {
-		return false, "", 0, err
-	}
-
-	signedURL, ok := respJSON["filePath"].(string)
-	if !ok || signedURL == "" {
-		return false, "", 0, fmt.Errorf("filePath is None or invalid")
-	}
-
-	return true, signedURL, file.FileUploadSize, nil
+	urls, err := parseDownloadURLs(bodyBytes)
+	return urls, file.FileUploadSize, err
 }
 
 // GetDownloadURL selects the best file for the given resolution and fetches a signed CDN URL.
