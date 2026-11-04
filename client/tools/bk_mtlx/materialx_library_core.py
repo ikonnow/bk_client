@@ -652,6 +652,14 @@ class MaterialXDocumentManager:
                     self.logger.info("Found exact match by type: %s", nodedef.getName())
                     break
             else:
+                # Multi-output nodes (separate3) have type "multioutput", so the
+                # type-filtered searches below can never find them.
+                exact_nodedef = self.document.getNodeDef(f"ND_{node_type}_{category}") if category else None
+                if exact_nodedef is not None:
+                    result = exact_nodedef
+                    self._node_def_cache[cache_key] = result
+                    self.performance_monitor.end_operation("get_node_definition")
+                    return result
                 # If no exact match by type, try searching by node name
                 print("DEBUG: No exact match by type, trying search by name...")
                 self.logger.info("No exact match by type, trying search by name...")
@@ -1749,8 +1757,13 @@ class MaterialXLibraryBuilder:
             # Connect to specific node
             self.node_builder.create_mtlx_input(surface_node, input_name, nodename=nodename)
         elif value is not None:
-            # Set constant value
-            self.node_builder.create_mtlx_input(surface_node, input_name, value)
+            # Use the caller's type; name-based inference turns "displacement" into color3.
+            surface_input = surface_node.getInput(input_name) or surface_node.addInput(input_name, input_type)
+            surface_input.setType(input_type)
+            converter = self.node_builder.type_converter
+            surface_input.setValueString(
+                converter.format_value_string(converter.convert_value(value, input_type), input_type)
+            )
 
     def add_output(self, name: str, output_type: str, nodename: str):
         """Add an output node to the nodegraph.

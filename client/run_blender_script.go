@@ -36,10 +36,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -265,6 +267,51 @@ func extractEmbeddedTree(embedRoot, destToolsDir string) error {
 	return nil
 }
 
+// Task progress reserved before the recipe reports; recipe 0..1 maps onto the rest (capped below 100,
+// which only TaskFinish sets).
+const (
+	blenderLaunchProgress = 10
+	blenderLoadProgress   = 12
+	recipeProgressMax     = 99
+)
+
+// parseRecipeProgressLine turns recipe stdout into task progress.
+//
+// Recognised lines: "BK_PROGRESS <0..1> [msg]", "BK_STATUS <stage>", and
+// Blender's own "Read blend:" log line, printed when the startup .blend
+// begins loading (before any recipe code can run; later reads are ignored).
+// Progress never decreases. ok is false for any other line.
+func parseRecipeProgressLine(line string, current int) (progress int, message string, ok bool) {
+	trimmed := strings.TrimSpace(line)
+	tag, rest, _ := strings.Cut(trimmed, " ")
+	rest = strings.TrimSpace(rest)
+	switch tag {
+	case "BK_PROGRESS":
+		fracText, msg, _ := strings.Cut(rest, " ")
+		frac, err := strconv.ParseFloat(fracText, 64)
+		if err != nil {
+			return current, "", false
+		}
+		// No min/max builtins: the Windows 7 build uses Go 1.20.
+		frac = math.Max(0, math.Min(1, frac))
+		span := float64(recipeProgressMax - blenderLoadProgress)
+		progress = blenderLoadProgress + int(frac*span)
+		if progress < current {
+			progress = current
+		}
+		return progress, strings.TrimSpace(msg), true
+	case "BK_STATUS":
+		if rest == "" {
+			return current, "", false
+		}
+		return current, rest, true
+	}
+	if current < blenderLoadProgress && strings.Contains(trimmed, "Read blend:") {
+		return blenderLoadProgress, "Loading .blend", true
+	}
+	return current, "", false
+}
+
 func doRunBlenderScript(data RunBlenderScriptData, taskID string) {
 	TasksMux.Lock()
 	if Tasks[data.AppID] == nil {
@@ -344,7 +391,7 @@ func doRunBlenderScript(data RunBlenderScriptData, taskID string) {
 	}
 
 	TaskProgressUpdateCh <- &TaskProgressUpdate{
-		AppID: data.AppID, TaskID: taskID, Progress: 10, Message: "Launching Blender",
+		AppID: data.AppID, TaskID: taskID, Progress: blenderLaunchProgress, Message: "Launching Blender",
 	}
 
 	// blender --background --factory-startup [<blend>] --python <script> -- [<params.json>]
@@ -394,6 +441,9 @@ func doRunBlenderScript(data RunBlenderScriptData, taskID string) {
 			output.WriteString(trimmed[len(trimmed)-16000:])
 		}
 	}
+	var progressMu sync.Mutex
+	currentProgress := blenderLaunchProgress
+	currentMsg := statusMsg
 	wg.Add(2)
 	streamReader := func(r io.Reader, prefix string) {
 		defer wg.Done()
@@ -402,9 +452,27 @@ func doRunBlenderScript(data RunBlenderScriptData, taskID string) {
 		for s.Scan() {
 			line := prefix + s.Text()
 			appendOutput(line)
+			progressMu.Lock()
+			progress, message, ok := parseRecipeProgressLine(s.Text(), currentProgress)
+			if ok {
+				currentProgress = progress
+				if message != "" {
+					currentMsg = message
+				}
+			}
+			msg := currentMsg
+			progressMu.Unlock()
+			if ok {
+				// Progress lines are rare and must not be dropped like plain log lines.
+				TaskProgressUpdateCh <- &TaskProgressUpdate{
+					AppID: data.AppID, TaskID: taskID,
+					Progress: progress, Message: msg, MessageDetailed: line,
+				}
+				continue
+			}
 			update := &TaskMessageUpdate{
 				AppID: data.AppID, TaskID: taskID,
-				Message: statusMsg, MessageDetailed: line,
+				Message: msg, MessageDetailed: line,
 			}
 			select {
 			case TaskMessageCh <- update:
@@ -417,6 +485,12 @@ func doRunBlenderScript(data RunBlenderScriptData, taskID string) {
 	wg.Wait()
 
 	if err := cmd.Wait(); err != nil {
+		// Output existence is the cache key, so never leave a partial file behind.
+		if data.OutputPath != "" {
+			if rmErr := os.Remove(data.OutputPath); rmErr != nil && !os.IsNotExist(rmErr) {
+				BKLog.Printf("%s Could not remove partial output %s: %v", EmoWarning, data.OutputPath, rmErr)
+			}
+		}
 		outputMu.Lock()
 		diagnostic := output.String()
 		outputMu.Unlock()

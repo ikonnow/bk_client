@@ -19,6 +19,10 @@ Recipe ABI:
                                           reference them from the .usd
                                           (via the vendored bk_mtlx exporter;
                                           skipped if MaterialX is unavailable)
+        normal_map_target : str (optional, default "preserve") - normal-map
+                                          convention for the exported MaterialX
+                                          graphs ("preserve", "directx", or
+                                          "unreal" for explicit signed decoding)
 
 Stdout protocol (consumed by bk_maya.core.blender_runner)::
     BK_STATUS   <stage>
@@ -37,6 +41,7 @@ import re
 import sys
 import traceback
 import xml.etree.ElementTree as ET
+from typing import Any
 
 import bpy  # type: ignore[import-not-found]
 
@@ -181,11 +186,16 @@ def _resolve_target_path(tex_rel_dir: str, image: bpy.types.Image, source_path: 
         i += 1
 
 
-def unpack_textures(blend_path: str) -> str:
+def unpack_textures(blend_path: str, *, progress_range: tuple[float, float] | None = None) -> str:
     """Unpack packed images and relocate them into ``//textures<suffix>/``.
 
-    Returns the absolute textures directory path (for diagnostic only —
-    Blender-side image paths stay ``//``-relative).
+    Args:
+        blend_path: the source .blend, used to place the textures folder.
+        progress_range: optional (start, end) fractions to report per image.
+
+    Returns:
+        The absolute textures directory path (for diagnostic only —
+        Blender-side image paths stay ``//``-relative).
     """
     rel_dir, abs_dir = _texture_subdir(blend_path)
     os.makedirs(abs_dir, exist_ok=True)
@@ -195,9 +205,11 @@ def unpack_textures(blend_path: str) -> str:
 
     unpacked = 0
     relocated = 0
-    for image in bpy.data.images:
-        if image.name == "Render Result":
-            continue
+    images = [image for image in bpy.data.images if image.name != "Render Result"]
+    for index, image in enumerate(images):
+        if progress_range is not None:
+            start, end = progress_range
+            progress(start + (end - start) * index / len(images), f"Unpacking textures {index + 1}/{len(images)}")
 
         if len(image.packed_files) > 0:
             # UDIM / sequence support: per-packed-file target paths.
@@ -844,6 +856,11 @@ def _sanitize_meshes_for_usd_export() -> None:
             # Skip linked / library data we can't convert.
             if obj.data.library is not None:
                 continue
+            # convert() writes the evaluated result back into the mesh datablock. Instances sharing
+            # it would then re-apply their modifiers to already-modified geometry (a Bevel on 24
+            # linked duplicates grew exponentially until Blender exhausted RAM), so unshare first.
+            if obj.data.users > 1 and obj.modifiers:
+                obj.data = obj.data.copy()
             # Select & activate just this object.
             with contextlib.suppress(Exception):
                 bpy.ops.object.select_all(action="DESELECT")
@@ -908,11 +925,9 @@ def _load_mtlx_exporter():
 def _fix_mtlx_normal_maps(mtlx_path: str) -> int:
     """Repair mistranslated normal-map connections in a generated .mtlx.
 
-    bk_mtlx can wire a ``color3`` normal-map ``<image>`` straight into the
-    ``vector3`` ``normal`` input of a ``<bump>`` node, which Maya rejects with
-    "Mismatched types in port connection". Rewrite that pattern into the
-    canonical tangent-space flow: a ``vector3`` (raw) image feeding a
-    ``<normalmap>`` node. Returns the number of connections fixed.
+    Insert a normalmap on incorrectly typed bump-normal connections without
+    replacing the bump or dropping its height input. Normal textures are raw
+    data. Returns the number of connections fixed.
     """
     try:
         # Parsing our own generated, trusted .mtlx (not untrusted input).
@@ -934,16 +949,19 @@ def _fix_mtlx_normal_maps(mtlx_path: str) -> int:
             src = by_name.get(nrm.get("nodename"))
             if src is None or src.tag != "image" or src.get("type") == "vector3":
                 continue
-            # The normal map was read as color3 and bumped — convert to a
-            # raw vector3 image feeding a normalmap node.
             src.set("type", "vector3")
             if src.get("nodedef"):
                 src.set("nodedef", "ND_image_vector3")
             src.set("colorspace", "raw")
-            node.tag = "normalmap"
-            if node.get("nodedef"):
-                node.set("nodedef", "ND_normalmap")
-            nrm.set("name", "in")
+            normal_name = f"bk_normalmap_{node.get('name')}"
+            while normal_name in by_name:
+                normal_name += "_"
+            normal = ET.SubElement(
+                graph, "normalmap", {"name": normal_name, "type": "vector3", "nodedef": "ND_normalmap_float"}
+            )
+            ET.SubElement(normal, "input", {"name": "in", "type": "vector3", "nodename": src.get("name")})
+            by_name[normal_name] = normal
+            nrm.set("nodename", normal_name)
             fixed += 1
 
     if fixed:
@@ -955,7 +973,588 @@ def _fix_mtlx_normal_maps(mtlx_path: str) -> int:
     return fixed
 
 
-def export_materialx_sidecar(out_usd: str) -> dict:
+def _convert_mtlx_normal_maps_to_directx(mtlx_path: str) -> int:
+    """Flip the green channel of each connected tangent-space normal map.
+
+    Blender's tangent-space normal maps use the OpenGL convention. MaterialX
+    has no portable per-map convention flag, so express the DirectX conversion
+    in the graph as ``G = 1 - G`` without modifying shared texture files.
+    """
+    try:
+        # Parsing our own generated, trusted .mtlx (not untrusted input).
+        tree = ET.parse(mtlx_path)  # noqa: S314  # nosec B314
+    except (ET.ParseError, OSError) as exc:
+        log(f"mtlx-normal: could not parse {os.path.basename(mtlx_path)} ({exc})")
+        return 0
+
+    root = tree.getroot()
+    converted = 0
+    for graph in root.iter("nodegraph"):
+        existing_names = {node.get("name") for node in graph if node.get("name")}
+        for node in list(graph):
+            if node.tag != "normalmap":
+                continue
+            normal_input = node.find("input[@name='in']")
+            if normal_input is None:
+                continue
+            source_name = normal_input.get("nodename")
+            if not source_name:
+                continue
+
+            source_node = next(
+                (child for child in graph if child.get("name") == source_name),
+                None,
+            )
+            if (
+                source_node is not None
+                and source_node.tag == "combine3"
+                and source_name.startswith("bk_dx_normal_combine_")
+            ):
+                continue
+
+            index = converted
+            while True:
+                separate_name = f"bk_dx_normal_separate_{index}"
+                subtract_name = f"bk_dx_normal_subtract_{index}"
+                combine_name = f"bk_dx_normal_combine_{index}"
+                if not ({separate_name, subtract_name, combine_name} & existing_names):
+                    break
+                index += 1
+            existing_names.update((separate_name, subtract_name, combine_name))
+
+            separate = ET.Element(
+                "separate3",
+                {"name": separate_name, "type": "multioutput", "nodedef": "ND_separate3_vector3"},
+            )
+            separate_input = ET.SubElement(
+                separate,
+                "input",
+                {"name": "in", "type": "vector3", "nodename": source_name},
+            )
+            source_output = normal_input.get("output")
+            if source_output:
+                separate_input.set("output", source_output)
+
+            subtract = ET.Element(
+                "subtract",
+                {"name": subtract_name, "type": "float", "nodedef": "ND_subtract_float"},
+            )
+            ET.SubElement(subtract, "input", {"name": "in1", "type": "float", "value": "1"})
+            ET.SubElement(
+                subtract,
+                "input",
+                {"name": "in2", "type": "float", "nodename": separate_name, "output": "outy"},
+            )
+
+            combine = ET.Element(
+                "combine3",
+                {"name": combine_name, "type": "vector3", "nodedef": "ND_combine3_vector3"},
+            )
+            ET.SubElement(
+                combine,
+                "input",
+                {"name": "in1", "type": "float", "nodename": separate_name, "output": "outx"},
+            )
+            ET.SubElement(
+                combine,
+                "input",
+                {"name": "in2", "type": "float", "nodename": subtract_name, "output": "out"},
+            )
+            ET.SubElement(
+                combine,
+                "input",
+                {"name": "in3", "type": "float", "nodename": separate_name, "output": "outz"},
+            )
+
+            node_index = list(graph).index(node)
+            graph.insert(node_index, separate)
+            graph.insert(node_index + 1, subtract)
+            graph.insert(node_index + 2, combine)
+            normal_input.set("nodename", combine_name)
+            normal_input.attrib.pop("output", None)
+            converted += 1
+
+    if converted:
+        with contextlib.suppress(AttributeError):
+            ET.indent(tree, space="  ")
+        tree.write(mtlx_path, encoding="unicode", xml_declaration=True)
+        log(f"mtlx-normal: converted {converted} tangent-space normal map(s) to DirectX")
+    return converted
+
+
+def _prepare_mtlx_normals_for_unreal(mtlx_path: str, *, material_name: str = "") -> int:
+    """Decode encoded normal inputs once into Unreal's signed tangent space.
+
+    Unreal's MaterialX translator treats normalmap as a pass-through and
+    automatically unpacks normal image samples. Re-encode those samples before
+    upstream image arithmetic, then decode with (2, -2, 2) and (-1, 1, -1).
+    This mode targets Unreal, not a conforming MaterialX renderer.
+    """
+    tree = ET.parse(mtlx_path)  # noqa: S314  # nosec B314
+    converted = 0
+    for graph in tree.getroot().iter("nodegraph"):
+        by_name = {node.get("name"): node for node in graph if node.get("name")}
+
+        def unique_name(base: str, names: dict = by_name) -> str:
+            name = base
+            while name in names:
+                name += "_"
+            names[name] = None
+            return name
+
+        def encoded_images(
+            source_name: str, visited: set[str], nodes: dict = by_name, parent: ET.Element = graph
+        ) -> None:
+            if source_name in visited:
+                return
+            visited.add(source_name)
+            source = nodes.get(source_name)
+            if source is None:
+                return
+            if source.get("blendkit_normal_encoding") == "encoded":
+                return
+            if source.tag == "image":
+                source_type = source.get("type")
+                if source_type not in ("color3", "vector3"):
+                    raise ValueError(f"Unsupported normal image type: {source_type}")
+                source.set("colorspace", "raw")
+                file_input = source.find("input[@name='file']")
+                if file_input is not None:
+                    file_input.set("colorspace", "raw")
+                image_name = unique_name(f"{source_name}_signed")
+                source.set("name", image_name)
+                source.set("type", "vector3")
+                source.set("nodedef", "ND_image_vector3")
+                scale_name = unique_name(f"{source_name}_encode_scale")
+                bias_name = unique_name(f"{source_name}_encode_bias")
+                scale = ET.SubElement(
+                    parent, "multiply", {"name": scale_name, "type": "vector3", "nodedef": "ND_multiply_vector3"}
+                )
+                ET.SubElement(scale, "input", {"name": "in1", "type": "vector3", "nodename": image_name})
+                ET.SubElement(scale, "input", {"name": "in2", "type": "vector3", "value": "0.5,0.5,0.5"})
+                bias = ET.SubElement(parent, "add", {"name": bias_name, "type": "vector3", "nodedef": "ND_add_vector3"})
+                ET.SubElement(bias, "input", {"name": "in1", "type": "vector3", "nodename": scale_name})
+                ET.SubElement(bias, "input", {"name": "in2", "type": "vector3", "value": "0.5,0.5,0.5"})
+                convert = ET.SubElement(
+                    parent,
+                    "convert",
+                    {
+                        "name": source_name,
+                        "type": source_type,
+                        "nodedef": f"ND_convert_vector3_{source_type}",
+                        "blendkit_normal_encoding": "encoded",
+                    },
+                )
+                if source_type == "vector3":
+                    convert.tag = "dot"
+                    convert.set("nodedef", "ND_dot_vector3")
+                ET.SubElement(convert, "input", {"name": "in", "type": "vector3", "nodename": bias_name})
+                nodes[image_name] = source
+                nodes[source_name] = convert
+                return
+            for input_node in source.findall("input"):
+                upstream = input_node.get("nodename")
+                if upstream:
+                    encoded_images(upstream, visited)
+
+        for node in list(graph):
+            if node.tag != "normalmap" or node.get("blendkit_normal_decoding") == "signed_directx":
+                continue
+            normal_input = node.find("input[@name='in']")
+            if normal_input is None:
+                continue
+            source_name = normal_input.get("nodename")
+            if source_name:
+                encoded_images(source_name, set())
+            scale_name = unique_name(f"bk_unreal_normal_scale_{converted}")
+            bias_name = unique_name(f"bk_unreal_normal_bias_{converted}")
+            scale = ET.SubElement(
+                graph, "multiply", {"name": scale_name, "type": "vector3", "nodedef": "ND_multiply_vector3"}
+            )
+            scale_input = ET.SubElement(scale, "input", dict(normal_input.attrib))
+            scale_input.set("name", "in1")
+            ET.SubElement(scale, "input", {"name": "in2", "type": "vector3", "value": "2,-2,2"})
+            bias = ET.SubElement(graph, "add", {"name": bias_name, "type": "vector3", "nodedef": "ND_add_vector3"})
+            ET.SubElement(bias, "input", {"name": "in1", "type": "vector3", "nodename": scale_name})
+            ET.SubElement(bias, "input", {"name": "in2", "type": "vector3", "value": "-1,1,-1"})
+            normal_input.attrib.clear()
+            normal_input.attrib.update({"name": "in", "type": "vector3", "nodename": bias_name})
+            node.set("blendkit_normal_decoding", "signed_directx")
+            converted += 1
+        for node in list(graph):
+            if node.tag != "bump":
+                continue
+            height_name = unique_name(f"bk_unreal_height_{node.get('name')}")
+            height = ET.SubElement(
+                graph,
+                "heighttonormal",
+                {"name": height_name, "type": "vector3", "nodedef": "ND_heighttonormal_vector3"},
+            )
+            height_input = node.find("input[@name='height']")
+            height_value = {"type": "float", "value": "0"} if height_input is None else dict(height_input.attrib)
+            height_value["name"] = "in"
+            ET.SubElement(height, "input", height_value)
+            scale_input = node.find("input[@name='scale']")
+            if scale_input is not None:
+                ET.SubElement(height, "input", dict(scale_input.attrib))
+            normal_input = node.find("input[@name='normal']")
+            if normal_input is None:
+                result_name = height_name
+            else:
+                normal_value = dict(normal_input.attrib)
+                sum_name = unique_name(f"{height_name}_sum")
+                product_name = unique_name(f"{height_name}_product")
+                xy_name = unique_name(f"{height_name}_xy")
+                z_name = unique_name(f"{height_name}_z")
+                result_name = unique_name(f"{height_name}_combined")
+                for tag, name in (("add", sum_name), ("multiply", product_name)):
+                    operation = ET.SubElement(
+                        graph, tag, {"name": name, "type": "vector3", "nodedef": f"ND_{tag}_vector3"}
+                    )
+                    ET.SubElement(operation, "input", {**normal_value, "name": "in1"})
+                    ET.SubElement(operation, "input", {"name": "in2", "type": "vector3", "nodename": height_name})
+                for name, source, mask in ((xy_name, sum_name, "1,1,0"), (z_name, product_name, "0,0,1")):
+                    operation = ET.SubElement(
+                        graph, "multiply", {"name": name, "type": "vector3", "nodedef": "ND_multiply_vector3"}
+                    )
+                    ET.SubElement(operation, "input", {"name": "in1", "type": "vector3", "nodename": source})
+                    ET.SubElement(operation, "input", {"name": "in2", "type": "vector3", "value": mask})
+                combined = ET.SubElement(
+                    graph, "add", {"name": result_name, "type": "vector3", "nodedef": "ND_add_vector3"}
+                )
+                ET.SubElement(combined, "input", {"name": "in1", "type": "vector3", "nodename": xy_name})
+                ET.SubElement(combined, "input", {"name": "in2", "type": "vector3", "nodename": z_name})
+            # Unreal drops bump's base normal when expanding it; combine signed normals explicitly.
+            node.tag = "normalize"
+            node.set("nodedef", "ND_normalize_vector3")
+            for input_node in list(node):
+                node.remove(input_node)
+            ET.SubElement(node, "input", {"name": "in", "type": "vector3", "nodename": result_name})
+            converted += 1
+    renamed = False
+    root = tree.getroot()
+    if material_name:
+        material_name = _usd_safe_name(material_name)
+        surfaces = root.findall("surfacematerial")
+        if len(surfaces) != 1:
+            raise ValueError(f"Expected one MaterialX material in {mtlx_path}")
+        surface = surfaces[0]
+        for child in root:
+            if child is surface or child.get("name") != material_name:
+                continue
+            if child.tag != "nodegraph":
+                raise ValueError(f"MaterialX name collision for {material_name}")
+            names = {element.get("name") for element in root}
+            graph_name = f"NG_{material_name}"
+            while graph_name in names:
+                graph_name += "_"
+            child.set("name", graph_name)
+            for element in root.iter():
+                if element.get("nodegraph") == material_name:
+                    element.set("nodegraph", graph_name)
+            renamed = True
+        if surface.get("name") != material_name:
+            surface.set("name", material_name)
+            renamed = True
+    if converted or renamed:
+        ET.indent(tree, space="  ")
+        tree.write(mtlx_path, encoding="unicode", xml_declaration=True)
+        log(f"mtlx-normal: explicitly decoded {converted} normal map(s) for Unreal")
+    return converted
+
+
+def _sanitize_mtlx_names(mtlx_path: str) -> int:
+    """Make MaterialX element names valid USD identifiers and update references.
+
+    usdMtlx maps nodegraphs and nodes to prims; a name such as ``06_Material``
+    fails its prim-path verification and aborts stage composition.
+
+    Args:
+        mtlx_path: the .mtlx document to rewrite in place.
+
+    Returns:
+        The number of renamed elements.
+    """
+    tree = ET.parse(mtlx_path)  # noqa: S314  # nosec B314
+    root = tree.getroot()
+
+    def _rename_scope(parent: ET.Element) -> dict[str, str]:
+        elements = [child for child in parent if child.get("name") and child.tag not in ("input", "output")]
+        taken = {element.get("name") for element in elements}
+        renames: dict[str, str] = {}
+        for element in elements:
+            name = element.get("name") or ""
+            safe = _usd_safe_name(name)
+            if safe == name:
+                continue
+            while safe in taken:
+                safe += "_"
+            taken.add(safe)
+            renames[name] = safe
+            element.set("name", safe)
+        return renames
+
+    root_renames = _rename_scope(root)
+    renamed = len(root_renames)
+    for element in root.iter():
+        graph = element.get("nodegraph")
+        if graph in root_renames:
+            element.set("nodegraph", root_renames[graph])
+    for child in root:
+        for port in child:
+            if port.tag == "input" and port.get("nodename") in root_renames:
+                port.set("nodename", root_renames[port.get("nodename")])
+    for graph in root.iter("nodegraph"):
+        graph_renames = _rename_scope(graph)
+        renamed += len(graph_renames)
+        for element in graph.iter():
+            if element.get("nodename") in graph_renames:
+                element.set("nodename", graph_renames[element.get("nodename")])
+    if renamed:
+        ET.indent(tree, space="  ")
+        tree.write(mtlx_path, encoding="unicode", xml_declaration=True)
+        log(f"mtlx-names: renamed {renamed} element(s) to valid USD identifiers")
+    return renamed
+
+
+def _fix_mtlx_scalar_connections(mtlx_path: str) -> int:
+    """Make implicit Blender color-to-scalar casts explicit for MaterialX."""
+    tree = ET.parse(mtlx_path)  # noqa: S314  # nosec B314
+    fixed = 0
+    for graph in tree.getroot().iter("nodegraph"):
+        by_name = {node.get("name"): node for node in graph if node.get("name")}
+        # Nodegraph <output>s feed float shader inputs too (e.g. a color graph -> specular_roughness).
+        ports = [port for node in list(graph) for port in node.findall("input")] + graph.findall("output")
+        for input_node in ports:
+            source = by_name.get(input_node.get("nodename"))
+            if (
+                input_node.get("type") != "float"
+                or input_node.get("output")
+                or source is None
+                or source.get("type") not in ("color3", "vector3", "color4", "vector4")
+            ):
+                continue
+            name = f"bk_scalar_{fixed}"
+            while name in by_name or f"{name}_vector" in by_name:
+                name += "_"
+            source_type = source.get("type")
+            vector_type = f"vector{source_type[-1]}"
+            source_name = source.get("name")
+            if source_type.startswith("color"):
+                vector = ET.SubElement(
+                    graph,
+                    "convert",
+                    {
+                        "name": f"{name}_vector",
+                        "type": vector_type,
+                        "nodedef": f"ND_convert_{source_type}_{vector_type}",
+                    },
+                )
+                ET.SubElement(vector, "input", {"name": "in", "type": source_type, "nodename": source_name})
+                source_name = f"{name}_vector"
+                by_name[source_name] = vector
+            conversion = ET.SubElement(
+                graph,
+                "dotproduct",
+                {"name": name, "type": "float", "nodedef": f"ND_dotproduct_{vector_type}"},
+            )
+            ET.SubElement(conversion, "input", {"name": "in1", "type": vector_type, "nodename": source_name})
+            ET.SubElement(
+                conversion,
+                "input",
+                {
+                    "name": "in2",
+                    "type": vector_type,
+                    "value": "0.3333333333,0.3333333333,0.3333333333" + (",0" if vector_type == "vector4" else ""),
+                },
+            )
+            by_name[name] = conversion
+            input_node.set("nodename", name)
+            fixed += 1
+    if fixed:
+        ET.indent(tree, space="  ")
+        tree.write(mtlx_path, encoding="unicode", xml_declaration=True)
+        log(f"mtlx-fix: made {fixed} scalar connection(s) explicit")
+    return fixed
+
+
+_MTLX_STDLIB: dict[str, Any] = {}
+
+
+def _mtlx_stdlib() -> Any:
+    """MaterialX standard data library (cached), or None outside a MaterialX-enabled Python."""
+    if "library" not in _MTLX_STDLIB:
+        try:
+            import MaterialX  # bundled with Blender, absent from the test venv
+        except ImportError:
+            _MTLX_STDLIB["library"] = None
+        else:
+            library = MaterialX.createDocument()
+            MaterialX.loadLibraries(
+                MaterialX.getDefaultDataLibraryFolders(), MaterialX.getDefaultDataSearchPath(), library
+            )
+            _MTLX_STDLIB["library"] = library
+    return _MTLX_STDLIB["library"]
+
+
+def _mtlx_port_source_type(library: Any, source: ET.Element, output: str) -> str:
+    if not output:
+        return "" if source.get("type") == "multioutput" else source.get("type") or ""
+    nodedef = library.getNodeDef(source.get("nodedef") or "")
+    port = nodedef.getActiveOutput(output) if nodedef is not None else None
+    return port.getType() if port is not None else ""
+
+
+def _repair_mtlx_types(mtlx_path: str, library: Any = None) -> int:
+    """Insert stdlib ``convert`` nodes wherever a connection's types don't match.
+
+    Blender casts freely between colors/vectors/floats (color ramp RGBA into a
+    color socket, an image into a vector math node); MaterialX rejects those
+    connections and Unreal Interchange then drops the whole material.
+
+    Args:
+        mtlx_path: the .mtlx document to rewrite in place.
+        library: MaterialX data library for nodedef lookups (defaults to the stdlib).
+
+    Returns:
+        The number of repaired connections.
+    """
+    library = library or _mtlx_stdlib()
+    if library is None:
+        return 0
+    tree = ET.parse(mtlx_path)  # noqa: S314  # nosec B314
+    fixed = 0
+    for graph in tree.getroot().iter("nodegraph"):
+        by_name = {node.get("name"): node for node in graph if node.get("name") and node.tag != "output"}
+        ports = [port for node in list(graph) for port in node.findall("input")] + graph.findall("output")
+        converts: dict[tuple[str, str, str], str] = {}
+        for port in ports:
+            source = by_name.get(port.get("nodename"))
+            target_type = port.get("type") or ""
+            output = port.get("output") or ""
+            if source is None:
+                continue
+            source_type = _mtlx_port_source_type(library, source, output)
+            nodedef = f"ND_convert_{source_type}_{target_type}"
+            if not source_type or source_type == target_type or library.getNodeDef(nodedef) is None:
+                continue
+            key = (source.get("name") or "", output, target_type)
+            name = converts.get(key)
+            if name is None:
+                name = f"bk_convert_{len(converts)}"
+                while name in by_name:
+                    name += "_"
+                convert = ET.SubElement(graph, "convert", {"name": name, "type": target_type, "nodedef": nodedef})
+                source_port = {"name": "in", "type": source_type, "nodename": key[0]}
+                if output:
+                    source_port["output"] = output
+                ET.SubElement(convert, "input", source_port)
+                by_name[name] = convert
+                converts[key] = name
+            port.set("nodename", name)
+            port.attrib.pop("output", None)
+            fixed += 1
+    if fixed:
+        ET.indent(tree, space="  ")
+        tree.write(mtlx_path, encoding="unicode", xml_declaration=True)
+        log(f"mtlx-fix: converted {fixed} mismatched connection(s)")
+    return fixed
+
+
+def _validate_mtlx(mtlx_path: str) -> str:
+    """Run MaterialX's own document validation; returns "" when valid (or MaterialX is unavailable)."""
+    library = _mtlx_stdlib()
+    if library is None:
+        return ""
+    import MaterialX
+
+    document = MaterialX.createDocument()
+    MaterialX.readFromXmlFile(document, mtlx_path)
+    document.importLibrary(library)
+    valid, message = document.validate()
+    return "" if valid else " | ".join(line.strip() for line in message.splitlines() if line.strip())
+
+
+def _author_usd_normal_metadata(usd_path: str, normal_map_target: str) -> int:
+    """Record normal conventions and native Preview Surface texture decoding.
+
+    Custom data documents interpretation; shader inputs carry the actual math.
+    A texture's original convention remains unknown when an upstream graph
+    may already compensate it. Blender Normal Map inputs expect OpenGL.
+    """
+    from pxr import Gf, Sdf, Usd, UsdShade
+
+    stage = Usd.Stage.Open(usd_path)
+    if stage is None:
+        raise RuntimeError(f"Could not open exported USD stage: {usd_path}")
+    source_conventions = {}
+    for image in bpy.data.images:
+        convention = image.get("blendkit_normal_convention", "unknown")
+        if convention not in ("opengl", "directx", "unknown"):
+            raise ValueError(f"Invalid blendkit_normal_convention on image {image.name!r}: {convention!r}")
+        source_conventions[os.path.basename(bpy.path.abspath(image.filepath))] = convention
+    authored = 0
+    for prim in stage.Traverse():
+        shader = UsdShade.Shader(prim)
+        if not shader:
+            continue
+        shader_id = str(shader.GetIdAttr().Get() or "")
+        if shader_id == "ND_image_vector3":
+            file_input = shader.GetInput("file")
+            file_path = file_input.Get() if file_input else None
+            if file_path:
+                prim.SetCustomDataByKey(
+                    "blendkit:normal:sourceConvention",
+                    source_conventions.get(os.path.basename(file_path.path), "unknown"),
+                )
+        if shader_id.startswith("ND_normalmap"):
+            prim.SetCustomDataByKey("blendkit:normal:inputConvention", "opengl")
+            prim.SetCustomDataByKey("blendkit:normal:sourceConvention", "unknown")
+            prim.SetCustomDataByKey(
+                "blendkit:normal:decoding",
+                "signed_directx" if normal_map_target == "unreal" else normal_map_target,
+            )
+            prim.SetCustomDataByKey(
+                "blendkit:normal:outputConvention",
+                "directx" if normal_map_target in ("unreal", "directx") else "opengl",
+            )
+            authored += 1
+        elif shader_id == "UsdPreviewSurface":
+            normal = shader.GetInput("normal")
+            source = normal.GetConnectedSource() if normal else None
+            if not source:
+                continue
+            texture = UsdShade.Shader(source[0].GetPrim())
+            if not texture or texture.GetIdAttr().Get() != "UsdUVTexture":
+                log(f"usd-normal: unsupported preview normal graph at {prim.GetPath()}; leaving unchanged")
+                continue
+            scale = texture.GetInput("scale")
+            if not scale or not scale.GetAttr().HasAuthoredValueOpinion():
+                scale = texture.CreateInput("scale", Sdf.ValueTypeNames.Float4)
+                scale.Set(Gf.Vec4f(2, 2, 2, 1))
+            bias = texture.GetInput("bias")
+            if not bias or not bias.GetAttr().HasAuthoredValueOpinion():
+                bias = texture.CreateInput("bias", Sdf.ValueTypeNames.Float4)
+                bias.Set(Gf.Vec4f(-1, -1, -1, 0))
+            texture.CreateInput("sourceColorSpace", Sdf.ValueTypeNames.Token).Set("raw")
+            sy, by = scale.Get()[1], bias.Get()[1]
+            convention = "opengl" if (sy, by) == (2, -1) else "directx" if (sy, by) == (-2, 1) else "unknown"
+            texture.GetPrim().SetCustomDataByKey("blendkit:normal:inputConvention", convention)
+            texture.GetPrim().SetCustomDataByKey("blendkit:normal:outputConvention", "opengl")
+            file_input = texture.GetInput("file")
+            file_path = file_input.Get() if file_input else None
+            if file_path:
+                texture.GetPrim().SetCustomDataByKey(
+                    "blendkit:normal:sourceConvention",
+                    source_conventions.get(os.path.basename(file_path.path), "unknown"),
+                )
+            authored += 1
+    stage.GetRootLayer().Save()
+    log(f"usd-normal: authored decoding metadata for {authored} shader(s)")
+    return authored
+
+
+def export_materialx_sidecar(out_usd: str, *, normal_map_target: str = "preserve") -> dict:
     """Export one ``.mtlx`` per used material next to *out_usd*.
 
     Layout (all relative to the .usd directory)::
@@ -979,6 +1578,8 @@ def export_materialx_sidecar(out_usd: str) -> dict:
 
     exporter = _load_mtlx_exporter()
     if exporter is None:
+        if normal_map_target in ("directx", "unreal"):
+            raise RuntimeError("Normal conversion requires the MaterialX exporter")
         return mapping
 
     mapping["materialx_available"] = True
@@ -1032,16 +1633,36 @@ def export_materialx_sidecar(out_usd: str) -> dict:
             if result.get("error"):
                 entry["error"] = str(result["error"])
             if entry["success"]:
-                exported += 1
+                _sanitize_mtlx_names(out_path)
                 _fix_mtlx_normal_maps(out_path)
+                _fix_mtlx_scalar_connections(out_path)
+                if normal_map_target == "directx":
+                    _convert_mtlx_normal_maps_to_directx(out_path)
+                elif normal_map_target == "unreal":
+                    _prepare_mtlx_normals_for_unreal(out_path, material_name=mat.name)
+                _repair_mtlx_types(out_path)
+                invalid = _validate_mtlx(out_path)
+                if invalid:
+                    # Unreal falls back to usdMtlx's raw prim parse, so this degrades rather than fails.
+                    entry["validation_errors"] = invalid
+                    log(f"mtlx: INVALID {mat.name!r}: {invalid}")
+                exported += 1
         except Exception as exc:  # never let one material abort the recipe
+            entry["success"] = False
             entry["error"] = str(exc)
             log(f"mtlx: FAILED for {mat.name!r}: {exc}")
         mapping["materials"].append(entry)
         if total:
-            progress(0.62 + 0.06 * (i + 1) / total, f"mtlx {i + 1}/{total}")
+            progress(0.48 + 0.12 * (i + 1) / total, f"Exporting materials {i + 1}/{total}")
 
     log(f"mtlx: exported {exported}/{total} material(s) -> {mtlx_dir}")
+    if normal_map_target == "unreal" and exported != total:
+        failed = [
+            f"{entry['name']!r} ({entry.get('error') or 'unknown error'})"
+            for entry in mapping["materials"]
+            if not entry["success"]
+        ]
+        raise RuntimeError(f"MaterialX export failed for {total - exported} material(s): {'; '.join(failed)}")
     return mapping
 
 
@@ -1277,6 +1898,8 @@ def export_to_usd(
     *,
     export_mtlx: bool = True,
     mtlx_references: bool = True,
+    normal_map_target: str = "preserve",
+    reload_blend: bool = True,
 ) -> str:
     """Export a .blend to .usd with the necessary pre-processing for Maya compatibility.
 
@@ -1290,14 +1913,29 @@ def export_to_usd(
       mtlx_references: when the sidecar .mtlx exist, make the USD reference them
         (geometry goes to the <stem>.usd crate + a thin <stem>.usda composes it)
         instead of Blender's inline MaterialX network
+      normal_map_target: "directx" flips tangent-space normal-map green channels
+        in the MaterialX sidecars; "preserve" leaves their convention unchanged;
+        "unreal" explicitly decodes raw samples into signed DirectX vectors
+      reload_blend: open *blend_path* first; pass False only when Blender
+        already started with that file and nothing has modified it yet
 
     Returns:
       The path Maya should load: the <stem>.usda wrapper when MaterialX
       references were written, otherwise the plain out_usd crate.
+
+    Raises:
+      ValueError: If the target or its required MaterialX options are invalid.
+      RuntimeError: If the required Unreal MaterialX export fails.
     """
+    if normal_map_target not in ("preserve", "directx", "unreal"):
+        raise ValueError(f"Unsupported normal_map_target: {normal_map_target!r}")
+    if normal_map_target == "unreal" and (not export_mtlx or not mtlx_references):
+        raise ValueError("Unreal normal decoding requires export_mtlx and mtlx_references")
+
     status("Opening blend")
-    bpy.ops.wm.open_mainfile(filepath=blend_path)
-    progress(0.05, "Opening blend")
+    if reload_blend:
+        bpy.ops.wm.open_mainfile(filepath=blend_path)
+    progress(0.05, "Opened blend")
 
     # Material assets carry the material datablock but usually no mesh — bind
     # it to a preview plane so wm.usd_export actually writes the material.
@@ -1315,14 +1953,24 @@ def export_to_usd(
 
     status("Consolidating rig")
     _flatten_rig_to_single_root(asset_name)
+    progress(0.08, "Consolidated rig")
 
     status("Unpacking textures")
-    unpack_textures(blend_path)
+    unpack_textures(blend_path, progress_range=(0.08, 0.30))
     progress(0.30, "Unpacked textures")
 
     status("Flattening materials")
     _flatten_material_node_groups()
     progress(0.45, "Flattened materials")
+
+    if normal_map_target == "unreal":
+        for material in bpy.data.materials:
+            if re.search(r"_\d+$", _usd_safe_name(material.name)):
+                name = f"{material.name}_Material"
+                while bpy.data.materials.get(name) is not None:
+                    name += "_"
+                # Unreal's MaterialX cache uses FName's plain name, which drops a numeric suffix.
+                material.name = name
 
     status("Renaming shader nodes")
     _rename_shader_nodes_to_material()
@@ -1335,8 +1983,10 @@ def export_to_usd(
     if export_mtlx:
         status("Exporting MaterialX")
         try:
-            mtlx_mapping = export_materialx_sidecar(out_usd)
-        except Exception as exc:  # never let mtlx failure abort the USD export
+            mtlx_mapping = export_materialx_sidecar(out_usd, normal_map_target=normal_map_target)
+        except Exception as exc:
+            if normal_map_target == "unreal":
+                raise RuntimeError(f"Required Unreal MaterialX export failed: {exc}") from exc
             log(f"mtlx: sidecar export failed (non-fatal): {exc}")
         progress(0.60, "MaterialX exported")
 
@@ -1348,23 +1998,23 @@ def export_to_usd(
 
     status("Splitting multi-material meshes")
     _split_meshes_by_material()
-    progress(0.55, "Split materials")
+    progress(0.62, "Split materials")
 
     status("Forcing single material per mesh")
     _force_single_material_per_mesh()
-    progress(0.58, "Single-material per mesh")
+    progress(0.64, "Single-material per mesh")
 
     status("Removing empty UV layers")
     _remove_empty_uv_layers()
-    progress(0.59, "Removed empty UV layers")
+    progress(0.65, "Removed empty UV layers")
 
     status("Fixing primary UV set")
     _fix_primary_uv_set()
-    progress(0.60, "Primary UV set fixed")
+    progress(0.66, "Primary UV set fixed")
 
     status("Sanitizing meshes for USD export")
     _sanitize_meshes_for_usd_export()
-    progress(0.62, "Sanitized meshes")
+    progress(0.68, "Sanitized meshes")
 
     status("Generating USD")
     out_dir = os.path.dirname(out_usd) or "."
@@ -1422,8 +2072,9 @@ def export_to_usd(
     tex_flags = {k: v for k, v in accepted.items() if "texture" in k.lower() or "relative" in k.lower()}
     log(f"usd_export: texture-related kwargs accepted = {tex_flags}")
 
+    progress(0.70, "Generating USD")
     bpy.ops.wm.usd_export(**accepted)
-    progress(0.90, "exported usd")
+    progress(0.90, "Exported USD")
 
     primary = out_usd
     if use_refs:
@@ -1433,7 +2084,9 @@ def export_to_usd(
         # The .usd crate is now a sub-layer of the .usda wrapper Maya loads.
         artifact(out_usd)
         primary = wrapper_usda
-    progress(0.99, "exported usd")
+    progress(0.93, "Writing normal metadata")
+    _author_usd_normal_metadata(primary, normal_map_target)
+    progress(0.99, "Exported USD")
     return primary
 
 
@@ -1477,6 +2130,10 @@ def main() -> int:
         return 1
 
     try:
+        # Callers usually launch Blender with the .blend already open; reopening costs seconds on large files.
+        already_open = bool(bpy.data.filepath) and os.path.normcase(
+            os.path.abspath(bpy.data.filepath)
+        ) == os.path.normcase(os.path.abspath(blend_path))
         primary = export_to_usd(
             blend_path,
             out_usd,
@@ -1485,10 +2142,16 @@ def main() -> int:
             asset_id=str(params.get("asset_id") or ""),
             export_mtlx=bool(params.get("export_mtlx", True)),
             mtlx_references=bool(params.get("mtlx_references", True)),
+            normal_map_target=str(params.get("normal_map_target") or "preserve"),
+            reload_blend=not already_open,
         )
     except Exception as exc:
         error(f"export failed: {exc}")
         traceback.print_exc(file=sys.stdout)
+        # Callers cache by output existence; a half-written stage must not look finished.
+        for partial in (out_usd, os.path.splitext(out_usd)[0] + ".usda"):
+            with contextlib.suppress(OSError):
+                os.remove(partial)
         return 1
 
     progress(1.0, "done")
