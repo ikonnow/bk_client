@@ -36,6 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -291,9 +292,14 @@ func parseRecipeProgressLine(line string, current int) (progress int, message st
 		if err != nil {
 			return current, "", false
 		}
-		frac = max(0, min(1, frac))
+		// No min/max builtins: the Windows 7 build uses Go 1.20.
+		frac = math.Max(0, math.Min(1, frac))
 		span := float64(recipeProgressMax - blenderLoadProgress)
-		return max(current, blenderLoadProgress+int(frac*span)), strings.TrimSpace(msg), true
+		progress = blenderLoadProgress + int(frac*span)
+		if progress < current {
+			progress = current
+		}
+		return progress, strings.TrimSpace(msg), true
 	case "BK_STATUS":
 		if rest == "" {
 			return current, "", false
