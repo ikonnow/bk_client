@@ -22,6 +22,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import math
 import os
 import shutil
 import time
@@ -96,6 +97,50 @@ NODE_TYPE_ALIASES = {
 def normalize_node_type(blender_node_type: str) -> str:
     """Resolve a Blender node.type to the key used in NODE_MAPPING/NODE_SCHEMAS."""
     return NODE_TYPE_ALIASES.get(blender_node_type, blender_node_type)
+
+
+def mtlx_output_name(source_node, source_socket) -> str:
+    """Return the MaterialX output for a Blender source socket, or "out" when unmapped."""
+    try:
+        return get_node_output_name_robust(source_node.type, source_socket.name)
+    except (AttributeError, ValueError):
+        return "out"
+
+
+def _socket_index(node, socket_name: str) -> int | None:
+    """Index of the first input socket called ``socket_name`` (matches ``_export_node`` enumeration)."""
+    for i, socket in enumerate(getattr(node, "inputs", [])):
+        if socket.name == socket_name:
+            return i
+    return None
+
+
+def _input_default(node, socket_name: str, default):
+    """Unlinked default of an input socket, or ``default`` when the socket doesn't exist."""
+    socket = node.inputs.get(socket_name) if hasattr(node.inputs, "get") else None
+    if socket is None or not hasattr(socket, "default_value"):
+        return default
+    value = socket.default_value
+    try:
+        return [float(v) for v in value]
+    except TypeError:
+        return float(value)
+
+
+def _linked_source(builder, input_nodes_by_index, socket_index):
+    """Return ``(mtlx_node, output, type)`` feeding a Blender input socket, or None when unlinked."""
+    if socket_index is None or socket_index not in (input_nodes_by_index or {}):
+        return None
+    name = input_nodes_by_index[socket_index]
+    output = getattr(builder, "input_outputs_by_index", {}).get(socket_index, "out")
+    node = builder.nodes.get(name)
+    source_type = node.getType() if node is not None else ""
+    if node is not None and output != "out":
+        nodedef = node.getNodeDef()
+        port = nodedef.getActiveOutput(output) if nodedef is not None else None
+        if port is not None:
+            source_type = port.getType()
+    return name, output, source_type
 
 
 def get_node_output_name_robust(blender_node_type: str, blender_output_name: str) -> str:
@@ -192,16 +237,24 @@ NODE_SCHEMAS = {
         {"blender": "Color", "mtlx": "in", "type": "color3", "category": "color3"},
     ],
     "COMBINE_COLOR": [
-        {"blender": "R", "mtlx": "r", "type": "float", "category": "color3"},
-        {"blender": "G", "mtlx": "g", "type": "float", "category": "color3"},
-        {"blender": "B", "mtlx": "b", "type": "float", "category": "color3"},
+        {"blender": "Red", "mtlx": "in1", "type": "float", "category": "color3"},
+        {"blender": "Green", "mtlx": "in2", "type": "float", "category": "color3"},
+        {"blender": "Blue", "mtlx": "in3", "type": "float", "category": "color3"},
     ],
     "SEPARATE_COLOR": [
         {"blender": "Color", "mtlx": "in", "type": "color3", "category": "color3"},
     ],
+    "SEPXYZ": [
+        {"blender": "Vector", "mtlx": "in", "type": "vector3", "category": "vector3"},
+    ],
+    "COMBXYZ": [
+        {"blender": "X", "mtlx": "in1", "type": "float", "category": "vector3"},
+        {"blender": "Y", "mtlx": "in2", "type": "float", "category": "vector3"},
+        {"blender": "Z", "mtlx": "in3", "type": "float", "category": "vector3"},
+    ],
     "CHECKER_TEXTURE": [
-        {"blender": "Color1", "mtlx": "in1", "type": "color3", "category": "color3"},
-        {"blender": "Color2", "mtlx": "in2", "type": "color3", "category": "color3"},
+        {"blender": "Color1", "mtlx": "color1", "type": "color3", "category": "color3"},
+        {"blender": "Color2", "mtlx": "color2", "type": "color3", "category": "color3"},
         {"blender": "Vector", "mtlx": "texcoord", "type": "vector2", "category": "color3"},
     ],
     "IMAGE_TEXTURE": [
@@ -467,18 +520,49 @@ NODE_MAPPING = {
             "R": "outr",
             "G": "outg",
             "B": "outb",
+            "Red": "outr",
+            "Green": "outg",
+            "Blue": "outb",
         },
     },
     "COMBINE_COLOR": {
         "mtlx_type": "combine3",
         "mtlx_category": "color3",
         "inputs": {
-            "R": "r",
-            "G": "g",
-            "B": "b",
+            "R": "in1",
+            "G": "in2",
+            "B": "in3",
+            "Red": "in1",
+            "Green": "in2",
+            "Blue": "in3",
         },
         "outputs": {
             "Image": "out",
+            "Color": "out",
+        },
+    },
+    "SEPXYZ": {
+        "mtlx_type": "separate3",
+        "mtlx_category": "vector3",
+        "inputs": {
+            "Vector": "in",
+        },
+        "outputs": {
+            "X": "outx",
+            "Y": "outy",
+            "Z": "outz",
+        },
+    },
+    "COMBXYZ": {
+        "mtlx_type": "combine3",
+        "mtlx_category": "vector3",
+        "inputs": {
+            "X": "in1",
+            "Y": "in2",
+            "Z": "in3",
+        },
+        "outputs": {
+            "Vector": "out",
         },
     },
     "CHECKER_TEXTURE": {
@@ -990,6 +1074,39 @@ class MaterialXBuilder:
         """Add a connection with type validation."""
         self.library_builder.add_connection(from_node, from_output, to_node, to_input)
 
+    def add_defined_node(self, nodedef_name: str, name: str, **values) -> str | None:
+        """Instantiate an exact stdlib nodedef, e.g. ``ND_power_color3FA``.
+
+        ``add_node`` guesses the nodedef from a category and picks wrong overloads
+        (or none) for nodes like power/fractal3d/rotate3d; this pins it.
+        """
+        nodedef = self.document.getNodeDef(nodedef_name)
+        if nodedef is None:
+            self.logger.warning("MaterialX nodedef %s not found", nodedef_name)
+            return None
+        lib = self.library_builder
+        if not lib.nodegraph:
+            lib.nodegraph = lib.node_builder.add_nodegraph(lib.material_name, lib.document)
+        node = lib.nodegraph.addNodeInstance(nodedef, lib.nodegraph.createValidChildName(name))
+        lib.nodes[node.getName()] = node
+        for input_name, value in values.items():
+            port = nodedef.getActiveInput(input_name)
+            if port is None or value is None:
+                continue
+            if isinstance(value, (list, tuple)):
+                text = ",".join(f"{float(v):.6g}" for v in value)
+            elif port.getType() in ("integer", "boolean", "string", "filename"):
+                text = str(value).lower() if isinstance(value, bool) else str(value)
+            else:
+                text = f"{float(value):.6g}"
+            node.addInput(input_name, port.getType()).setValueString(text)
+        return node.getName()
+
+    def connect_source(self, source, to_node: str, to_input: str) -> None:
+        """Connect a ``_linked_source`` tuple (or ``(node, output)``) to ``to_node.to_input``."""
+        if source and to_node:
+            self.add_connection(source[0], source[1], to_node, to_input)
+
     def add_surface_shader_node(self, node_type: str, name: str, **params) -> str:
         """Add a surface shader node with enhanced type safety."""
         return self.library_builder.add_surface_shader_node(node_type, name, **params)
@@ -1327,6 +1444,10 @@ class NodeMapper:
             exported_nodes,
         )
 
+        vector = node.inputs.get("Vector")
+        if vector is not None and not vector.is_linked:
+            builder.nodes[node_name].removeInput("texcoord")
+
         # Custom logic for file/image handling
         if node.image:
             image_path = node.image.filepath
@@ -1417,7 +1538,15 @@ class NodeMapper:
         exported_nodes=None,
     ):
         """Map Normal Map node to MaterialX normalmap node."""
-        node_name = builder.add_node("normalmap", f"normalmap_{node.name}", "vector3")
+        strength = node.inputs.get("Strength")
+        node_name = builder.add_node(
+            "normalmap", f"normalmap_{node.name}", "vector3",
+            scale=float(strength.default_value) if strength is not None else 1.0,
+        )
+        NodeMapper._connect_inputs_by_index(
+            builder, node_name, input_nodes_by_index,
+            {index: "scale" for index, socket in enumerate(node.inputs) if socket.name == "Strength"},
+        )
 
         # Map inputs using type-safe method
         try:
@@ -1443,7 +1572,10 @@ class NodeMapper:
 
                 # Get the correct output name using robust mapping
                 if source_node_type and source_output_name:
-                    output_name = get_node_output_name_robust(source_node_type, source_output_name)
+                    try:
+                        output_name = get_node_output_name_robust(source_node_type, source_output_name)
+                    except ValueError:
+                        output_name = "out"
                 else:
                     # Fallback to default output name
                     output_name = "out"
@@ -1601,9 +1733,10 @@ class NodeMapper:
         if node_name not in builder.nodes:
             return
         by_index = input_nodes_by_index or {}
+        outputs = getattr(builder, "input_outputs_by_index", {})
         for i, param in enumerate(params):
             if i in by_index:
-                builder.add_connection(by_index[i], "out", node_name, param)
+                builder.add_connection(by_index[i], outputs.get(i, "out"), node_name, param)
                 continue
             try:
                 socket = node.inputs[i]
@@ -1797,7 +1930,7 @@ class NodeMapper:
         exported_nodes=None,
     ) -> str:
         """Enhanced checker texture mapping with type-safe input creation."""
-        return map_node_with_schema_enhanced(
+        node_name = map_node_with_schema_enhanced(
             node,
             builder,
             NODE_SCHEMAS["CHECKER_TEXTURE"],
@@ -1806,6 +1939,12 @@ class NodeMapper:
             constant_manager,
             exported_nodes,
         )
+        checker = builder.nodes.get(node_name)
+        if checker is not None:
+            # Blender's Scale is the number of squares per unit, like MaterialX's uvtiling.
+            scale = float(_input_default(node, "Scale", 5.0))
+            checker.addInput("uvtiling", "vector2").setValueString(f"{scale:.6g},{scale:.6g}")
+        return node_name
 
     @staticmethod
     def map_gradient_texture_enhanced(
@@ -1833,21 +1972,38 @@ class NodeMapper:
         node,
         builder: MaterialXBuilder,
         input_nodes: dict,  # noqa: ARG004
-        input_nodes_by_index: dict | None = None,  # noqa: ARG004
+        input_nodes_by_index: dict | None = None,
         blender_node=None,  # noqa: ARG004
-        constant_manager=None,
-        exported_nodes=None,
+        constant_manager=None,  # noqa: ARG004
+        exported_nodes=None,  # noqa: ARG004
     ) -> str:
-        """Enhanced noise texture mapping with type-safe input creation."""
-        return map_node_with_schema_enhanced(
-            node,
-            builder,
-            NODE_SCHEMAS["NOISE_TEXTURE"],
-            "fractal3d",
-            "color3",
-            constant_manager,
-            exported_nodes,
+        """Map Noise Texture to fractal3d(position * Scale), remapped from [-1, 1] to Blender's [0, 1]."""
+        name = node.name
+        vector = _linked_source(builder, input_nodes_by_index, _socket_index(node, "Vector"))
+        if vector is None:
+            # Blender defaults to Generated coordinates; object-space position is the closest match.
+            vector = (builder.add_defined_node("ND_position_vector3", f"noise_position_{name}"), "out")
+        scaled = builder.add_defined_node(
+            "ND_multiply_vector3FA", f"noise_scale_{name}", in2=_input_default(node, "Scale", 5.0)
         )
+        builder.connect_source(vector, scaled, "in1")
+        color = any(o.name == "Color" and o.links for o in node.outputs)
+        out_type = "color3" if color else "float"
+        detail = float(_input_default(node, "Detail", 2.0))
+        fractal = builder.add_defined_node(
+            f"ND_fractal3d_{out_type}",
+            f"fractal3d_{name}",
+            octaves=max(1, min(16, int(detail) + 1)),
+            lacunarity=_input_default(node, "Lacunarity", 2.0),
+            diminish=_input_default(node, "Roughness", 0.5),
+        )
+        builder.connect_source((scaled, "out"), fractal, "position")
+        suffix = "color3FA" if color else "float"
+        half = builder.add_defined_node(f"ND_multiply_{suffix}", f"noise_half_{name}", in2=0.5)
+        builder.connect_source((fractal, "out"), half, "in1")
+        remapped = builder.add_defined_node(f"ND_add_{suffix}", f"noise_{name}", in2=0.5)
+        builder.connect_source((half, "out"), remapped, "in1")
+        return remapped
 
     @staticmethod
     def map_wave_texture_enhanced(
@@ -2084,9 +2240,10 @@ class NodeMapper:
         if node_name not in builder.nodes:
             return
         by_index = input_nodes_by_index or {}
+        outputs = getattr(builder, "input_outputs_by_index", {})
         for socket_index, mtlx_param in index_to_param.items():
             if socket_index in by_index:
-                builder.add_connection(by_index[socket_index], "out", node_name, mtlx_param)
+                builder.add_connection(by_index[socket_index], outputs.get(socket_index, "out"), node_name, mtlx_param)
 
     @staticmethod
     def map_bump(
@@ -2100,12 +2257,27 @@ class NodeMapper:
     ) -> str:
         """Map Bump node to MaterialX bump node."""
         node_name = builder.add_node("bump", f"bump_{node.name}", "vector3")
-        # Blender Bump sockets: 0 Strength, 1 Distance, 2 Height, 3 Normal.
+        scale_name = builder.add_node(
+            "multiply", f"bump_scale_{node.name}", "float",
+            in1=float(node.inputs["Strength"].default_value),
+            in2=float(node.inputs["Distance"].default_value),
+        )
+        scale_params = {"Strength": "in1", "Distance": "in2"}
+        NodeMapper._connect_inputs_by_index(
+            builder, scale_name, input_nodes_by_index,
+            {index: scale_params[socket.name] for index, socket in enumerate(node.inputs) if socket.name in scale_params},
+        )
+        if node.invert:
+            inverted = builder.add_node("multiply", f"bump_invert_{node.name}", "float", in2=-1.0)
+            builder.add_connection(scale_name, "out", inverted, "in1")
+            scale_name = inverted
+        builder.add_connection(scale_name, "out", node_name, "scale")
+        socket_params = {"Height": "height", "Normal": "normal"}
         NodeMapper._connect_inputs_by_index(
             builder,
             node_name,
             input_nodes_by_index,
-            {2: "height", 3: "normal"},
+            {index: socket_params[socket.name] for index, socket in enumerate(node.inputs) if socket.name in socket_params},
         )
         return node_name
 
@@ -2119,7 +2291,10 @@ class NodeMapper:
         constant_manager=None,  # noqa: ARG004
         exported_nodes=None,  # noqa: ARG004
     ) -> str:
-        """Map Mapping node to MaterialX transform2d node."""
+        """Map Mapping node: 3D coordinates get a full 3D transform, 2D UVs keep transform2d."""
+        source = _linked_source(builder, input_nodes_by_index, 0)
+        if source is not None and source[2] in ("vector3", "color3"):
+            return NodeMapper._map_mapping_3d(node, builder, source)
         node_name = builder.add_node("transform2d", f"mapping_{node.name}", "vector2")
         # Blender Mapping socket 0 is the Vector input.
         NodeMapper._connect_inputs_by_index(
@@ -2129,6 +2304,52 @@ class NodeMapper:
             {0: "in"},
         )
         return node_name
+
+    @staticmethod
+    def _map_mapping_3d(node, builder: MaterialXBuilder, source) -> str:
+        """Chain scale/rotate/translate vector3 nodes exactly as Blender's Mapping node orders them."""
+        vector_type = getattr(node, "vector_type", "POINT")
+        location = _input_default(node, "Location", [0.0, 0.0, 0.0])
+        rotation = [math.degrees(v) for v in _input_default(node, "Rotation", [0.0, 0.0, 0.0])]
+        scale = _input_default(node, "Scale", [1.0, 1.0, 1.0])
+        axes = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+        current = source
+        step = 0
+
+        def chain(nodedef: str, input_name: str = "in1", **values):
+            nonlocal current, step
+            created = builder.add_defined_node(nodedef, f"mapping_{node.name}_{step}", **values)
+            builder.connect_source(current, created, input_name)
+            current = (created, "out", "vector3")
+            step += 1
+
+        if source[2] != "vector3":
+            chain("ND_convert_color3_vector3", "in")
+        if vector_type == "TEXTURE":
+            # Inverse transform: (v - location), inverse rotation (Z, Y, X), / scale.
+            if any(location):
+                chain("ND_subtract_vector3", in2=location)
+            for axis in (2, 1, 0):
+                if rotation[axis]:
+                    chain("ND_rotate3d_vector3", "in", amount=-rotation[axis], axis=axes[axis])
+            if any(s != 1.0 for s in scale):
+                chain("ND_divide_vector3", in2=[s or 1.0 for s in scale])
+        else:
+            if any(s != 1.0 for s in scale):
+                if vector_type == "NORMAL":
+                    chain("ND_divide_vector3", in2=[s or 1.0 for s in scale])
+                else:
+                    chain("ND_multiply_vector3", in2=scale)
+            for axis in (0, 1, 2):
+                if rotation[axis]:
+                    chain("ND_rotate3d_vector3", "in", amount=rotation[axis], axis=axes[axis])
+            if vector_type == "POINT" and any(location):
+                chain("ND_add_vector3", in2=location)
+            if vector_type == "NORMAL":
+                chain("ND_normalize_vector3", "in")
+        if step == 0:
+            chain("ND_dot_vector3", "in")
+        return current[0]
 
     @staticmethod
     def map_layer(
@@ -2267,8 +2488,19 @@ class NodeMapper:
         try:
             is_connected, value_or_node, _type_str = get_input_value_or_connection(node, "Fac", exported_nodes)
             if is_connected:
-                # Connect to texcoord input
-                builder.add_connection(value_or_node, "out", node_name, "texcoord")
+                # MaterialX ramp reads texcoord.x, while Blender's ramp takes a float factor.
+                output_name = getattr(builder, "input_outputs_by_index", {}).get(0, "out")
+                source = builder.nodes.get(value_or_node)
+                source_type = "float" if output_name != "out" else (source.getType() if source is not None else "float")
+                if source_type not in ("float", "vector2"):
+                    extract = builder.add_node("extract", f"colorramp_factor_{node.name}", source_type, index=0)
+                    builder.add_connection(value_or_node, output_name, extract, "in")
+                    value_or_node, output_name, source_type = extract, "out", "float"
+                if source_type == "float":
+                    convert = builder.add_node("convert_float", f"colorramp_texcoord_{node.name}", "vector2")
+                    builder.add_connection(value_or_node, output_name, convert, "in")
+                    value_or_node, output_name = convert, "out"
+                builder.add_connection(value_or_node, output_name, node_name, "texcoord")
         except (KeyError, AttributeError):
             pass
 
@@ -2344,13 +2576,26 @@ class NodeMapper:
         node,
         builder,
         input_nodes,  # noqa: ARG004
-        input_nodes_by_index=None,  # noqa: ARG004
+        input_nodes_by_index=None,
         blender_node=None,  # noqa: ARG004
         constant_manager=None,  # noqa: ARG004
         exported_nodes=None,  # noqa: ARG004
     ):
-        """Map Gamma node to MaterialX gamma node."""
-        return builder.add_node("gamma", f"gamma_{node.name}", "color3")
+        """Map Gamma (Color ** Gamma) to MaterialX power; there is no stdlib gamma node."""
+        node_name = builder.add_defined_node(
+            "ND_power_color3FA", f"gamma_{node.name}", in2=_input_default(node, "Gamma", 1.0)
+        )
+        color = _linked_source(builder, input_nodes_by_index, _socket_index(node, "Color"))
+        if color:
+            builder.connect_source(color, node_name, "in1")
+        else:
+            builder.nodes[node_name].addInput("in1", "color3").setValueString(
+                ",".join(f"{v:.6g}" for v in _input_default(node, "Color", [1.0, 1.0, 1.0])[:3])
+            )
+        builder.connect_source(
+            _linked_source(builder, input_nodes_by_index, _socket_index(node, "Gamma")), node_name, "in2"
+        )
+        return node_name
 
     @staticmethod
     def map_split_color(
@@ -2392,35 +2637,30 @@ class NodeMapper:
         node,
         builder,
         input_nodes,  # noqa: ARG004
-        input_nodes_by_index=None,
+        input_nodes_by_index=None,  # noqa: ARG004
         blender_node=None,  # noqa: ARG004
-        constant_manager=None,  # noqa: ARG004
-        exported_nodes=None,  # noqa: ARG004
+        constant_manager=None,
+        exported_nodes=None,
     ):
         """Map Separate XYZ node to MaterialX separate3 node."""
-        node_name = builder.add_node("separate3", f"split_vector_{node.name}", "vector3")
-        NodeMapper._connect_inputs_by_index(builder, node_name, input_nodes_by_index, {0: "in"})
-        return node_name
+        return map_node_with_schema_enhanced(
+            node, builder, NODE_SCHEMAS["SEPXYZ"], "separate3", "vector3", constant_manager, exported_nodes
+        )
 
     @staticmethod
     def map_merge_vector(
         node,
         builder,
         input_nodes,  # noqa: ARG004
-        input_nodes_by_index=None,
+        input_nodes_by_index=None,  # noqa: ARG004
         blender_node=None,  # noqa: ARG004
-        constant_manager=None,  # noqa: ARG004
-        exported_nodes=None,  # noqa: ARG004
+        constant_manager=None,
+        exported_nodes=None,
     ):
         """Map Combine XYZ node to MaterialX combine3 node."""
-        node_name = builder.add_node("combine3", f"merge_vector_{node.name}", "vector3")
-        NodeMapper._connect_inputs_by_index(
-            builder,
-            node_name,
-            input_nodes_by_index,
-            {0: "in1", 1: "in2", 2: "in3"},
+        return map_node_with_schema_enhanced(
+            node, builder, NODE_SCHEMAS["COMBXYZ"], "combine3", "vector3", constant_manager, exported_nodes
         )
-        return node_name
 
     @staticmethod
     def map_musgrave_texture_enhanced(
@@ -2746,8 +2986,10 @@ class MaterialXExporter:
                 f"{self.material.diffuse_color[0]}, {self.material.diffuse_color[1]}, {self.material.diffuse_color[2]}",
             ),
         )
-        self.builder.add_surface_shader_input(surface_node, "roughness", "float", value=str(self.material.roughness))
-        self.builder.add_surface_shader_input(surface_node, "metallic", "float", value=str(self.material.metallic))
+        self.builder.add_surface_shader_input(
+            surface_node, "specular_roughness", "float", value=str(self.material.roughness)
+        )
+        self.builder.add_surface_shader_input(surface_node, "metalness", "float", value=str(self.material.metallic))
 
         self.builder.set_material_surface(surface_node)
         self._write_file()
@@ -3099,14 +3341,16 @@ class MaterialXExporter:
         # Build input nodes dictionary - handle duplicate input names
         input_nodes = {}
         input_nodes_by_index = {}  # Store by index for nodes with duplicate names
+        input_outputs_by_index = {}  # MaterialX output names (e.g. "outy" of a separate3)
         for i, input_socket in enumerate(node.inputs):
-            kind, payload, _from_socket = self._resolve_input_source(input_socket)
+            kind, payload, from_socket = self._resolve_input_source(input_socket)
             if kind == "node":
                 input_node = payload
                 if input_node not in self.exported_nodes:
                     self._export_node(input_node)
                 input_nodes[input_socket.name] = self.exported_nodes[input_node]
                 input_nodes_by_index[i] = self.exported_nodes[input_node]
+                input_outputs_by_index[i] = mtlx_output_name(input_node, from_socket)
                 self.logger.info("    Input %s '%s' connected to %s", i, input_socket.name, input_node.name)
         self.logger.info("  Input nodes: %s", list(input_nodes.keys()))
         self.logger.info("  Input nodes by index: %s", list(input_nodes_by_index.keys()))
@@ -3114,6 +3358,8 @@ class MaterialXExporter:
         self.logger.info("  *** DEBUG: Node %s has %s indexed inputs ***", node.name, len(input_nodes_by_index))
         # Map the node
         try:
+            # Index-wired mappers read this to connect the right output of multi-output sources.
+            self.builder.input_outputs_by_index = input_outputs_by_index
             # Pass constant_manager to schema-driven mappers
             node_name = mapper(
                 node,
@@ -3125,6 +3371,13 @@ class MaterialXExporter:
                 self.exported_nodes,
             )
             self.exported_nodes[node] = node_name
+            if node_name not in self.builder.nodes and input_nodes_by_index:
+                # No MaterialX nodedef (e.g. RGB Curves): pass the main input through instead of a dangling name.
+                first = min(input_nodes_by_index)
+                self.unsupported_nodes.append({"name": node.name, "type": node.type})
+                self.logger.warning("  %s has no MaterialX equivalent; passing input %s through", node.name, first)
+                node_name = input_nodes_by_index[first]
+                self.exported_nodes[node] = node_name
             self.logger.info("  Mapped to: %s", node_name)
 
         except Exception:
