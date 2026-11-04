@@ -4015,12 +4015,15 @@ func GetAssetInstance(assetBaseID, apiKey string) (Asset, error) {
 	return searchResult.Results[0], nil
 }
 
-// Get AvailableSoftwares as a slice.
+// GetAvailableSoftwares returns a snapshot of connected software, or nil if none.
 func GetAvailableSoftwares() []Software {
 	var softwares []Software
 	AvailableSoftwaresMux.Lock()
-	for i := range AvailableSoftwares {
-		softwares = append(softwares, AvailableSoftwares[i])
+	if len(AvailableSoftwares) > 0 {
+		softwares = make([]Software, 0, len(AvailableSoftwares))
+		for _, software := range AvailableSoftwares {
+			softwares = append(softwares, software)
+		}
 	}
 	AvailableSoftwaresMux.Unlock()
 

@@ -215,6 +215,7 @@ func generateSoftwares(size, seed uint64) map[int]Software {
 	sm := map[int]Software{}
 	for i := range size {
 		software := generateSoftware(seed + i)
+		software.AppID = int(i) + 1
 		sm[software.AppID] = software
 	}
 	return sm
@@ -264,11 +265,11 @@ func BenchmarkGetAvailableSoftwares(b *testing.B) {
 	}
 	for _, bench := range benches {
 		b.Run(bench.name, func(b *testing.B) {
+			b.ReportAllocs()
 			AvailableSoftwaresMux.Lock()
 			AvailableSoftwares = bench.softwareMap
 			AvailableSoftwaresMux.Unlock()
 			for b.Loop() {
-				// TODO: looks that there is a space for improvement of the function perf
 				GetAvailableSoftwares()
 			}
 		})
@@ -287,6 +288,11 @@ func TestGetAvailableSoftwares(t *testing.T) {
 		softwareMap   map[int]Software
 		expectedCount int
 	}{
+		{
+			name:          "Nil map",
+			softwareMap:   nil,
+			expectedCount: 0,
+		},
 		{
 			name:          "Empty map",
 			softwareMap:   map[int]Software{},
@@ -307,6 +313,11 @@ func TestGetAvailableSoftwares(t *testing.T) {
 			},
 			expectedCount: 2,
 		},
+		{
+			name:          "Many softwares",
+			softwareMap:   generateSoftwares(64, 111),
+			expectedCount: 64,
+		},
 	}
 
 	for _, tt := range tests {
@@ -320,11 +331,23 @@ func TestGetAvailableSoftwares(t *testing.T) {
 			if len(result) != tt.expectedCount {
 				t.Errorf("Expected %d softwares, got %d", tt.expectedCount, len(result))
 			}
+			if tt.expectedCount == 0 && result != nil {
+				t.Errorf("Expected nil for no connected software, got %#v", result)
+			}
 
+			seen := make(map[int]bool, len(result))
 			for _, software := range result {
-				if _, exists := tt.softwareMap[software.AppID]; !exists {
+				expected, exists := tt.softwareMap[software.AppID]
+				if !exists {
 					t.Errorf("Software with AppID %d not found in original map", software.AppID)
 				}
+				if !reflect.DeepEqual(software, expected) {
+					t.Errorf("Software with AppID %d: got %#v, want %#v", software.AppID, software, expected)
+				}
+				if seen[software.AppID] {
+					t.Errorf("Duplicate software with AppID %d", software.AppID)
+				}
+				seen[software.AppID] = true
 			}
 		})
 	}
@@ -332,6 +355,56 @@ func TestGetAvailableSoftwares(t *testing.T) {
 	// clean global variables after the test
 	AvailableSoftwares = make(map[int]Software)
 	AvailableSoftwaresMux = sync.Mutex{}
+}
+
+func TestGetAvailableSoftwaresSnapshot(t *testing.T) {
+	original := AvailableSoftwares
+	t.Cleanup(func() {
+		AvailableSoftwares = original
+	})
+	software := generateSoftware(111)
+	AvailableSoftwares = map[int]Software{software.AppID: software}
+
+	first := GetAvailableSoftwares()
+	second := GetAvailableSoftwares()
+	if len(first) != 1 || len(second) != 1 {
+		t.Fatal("Expected one software in each snapshot")
+	}
+
+	first[0].Name = "Changed snapshot"
+	if !reflect.DeepEqual(AvailableSoftwares[software.AppID], software) {
+		t.Error("Changing a snapshot modified the registry")
+	}
+	if !reflect.DeepEqual(second[0], software) {
+		t.Error("Changing one snapshot modified another")
+	}
+
+	AvailableSoftwares[software.AppID] = Software{AppID: software.AppID, Name: "Changed registry"}
+	if !reflect.DeepEqual(second[0], software) {
+		t.Error("Changing the registry modified an existing snapshot")
+	}
+}
+
+func TestGetAvailableSoftwaresAllocations(t *testing.T) {
+	original := AvailableSoftwares
+	t.Cleanup(func() {
+		AvailableSoftwares = original
+	})
+	for _, size := range []uint64{0, 1, 2, 4, 8, 64} {
+		t.Run(fmt.Sprintf("%d running", size), func(t *testing.T) {
+			AvailableSoftwares = generateSoftwares(size, 111)
+			want := 1.0
+			if size == 0 {
+				want = 0
+			}
+			allocs := testing.AllocsPerRun(100, func() {
+				GetAvailableSoftwares()
+			})
+			if allocs != want {
+				t.Errorf("Expected %.0f allocations, got %.0f", want, allocs)
+			}
+		})
+	}
 }
 
 func TestUpdateAvailableSoftware(t *testing.T) {
