@@ -64,10 +64,10 @@ func initProviders(mux *http.ServeMux, vapi string) {
 		BKLog.Printf("%s Assets2Godot index ready: %s", EmoOK, path)
 	}
 
-	reg := providers.NewRegistry(
+	reg := providers.NewRegistry(AssetIndex,
 		blenderkit.New(),
-		fab_vault.New(AssetIndex),
-		local_dir.New(AssetIndex),
+		fab_vault.New(AssetIndex, SettingsStore),
+		local_dir.New(AssetIndex, SettingsStore),
 	)
 	reg.RegisterRoutes(mux, vapi)
 	BKLog.Printf("%s Assets2Godot providers registered: blenderkit, fab_vault, local_dir", EmoOK)

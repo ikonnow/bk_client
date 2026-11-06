@@ -27,7 +27,72 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+
+	"github.com/blenderkit/blenderkit/client/internal/index"
+	"github.com/blenderkit/blenderkit/client/internal/settings"
 )
+
+// PluginName is the settings namespace every Assets2Godot variable is stored
+// under (Snapshot.PluginVariables["assets2godot"]).
+const PluginName = "assets2godot"
+
+// Config is the slice of the Client settings store providers need to read and
+// persist their user-configured roots. *settings.Store satisfies it; it may be
+// nil in degraded mode, which providers must tolerate.
+type Config interface {
+	GetVariable(plugin, variable string) (string, bool)
+	SetVariable(plugin, variable, value string) (settings.Snapshot, error)
+}
+
+// RootsFromVar decodes a JSON string-list variable. The second return value
+// is true when the variable exists at all — an explicitly stored empty list
+// means "user removed every root", which differs from "never configured".
+func RootsFromVar(cfg Config, variable string) ([]string, bool) {
+	if cfg == nil {
+		return nil, false
+	}
+	v, ok := cfg.GetVariable(PluginName, variable)
+	if !ok {
+		return nil, false
+	}
+	var out []string
+	if json.Unmarshal([]byte(v), &out) != nil || out == nil {
+		out = []string{}
+	}
+	return out, true
+}
+
+// SaveRoots normalizes and persists a roots list as a JSON variable,
+// returning the stored list.
+func SaveRoots(cfg Config, variable string, roots []string) ([]string, error) {
+	norm := NormalizeRoots(roots)
+	data, _ := json.Marshal(norm)
+	_, err := cfg.SetVariable(PluginName, variable, string(data))
+	return norm, err
+}
+
+// NormalizeRoots cleans each path, drops empties and duplicates, and sorts
+// for stable settings diffs and UI output.
+func NormalizeRoots(roots []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(roots))
+	for _, r := range roots {
+		if abs, err := filepath.Abs(r); err == nil {
+			r = abs
+		}
+		r = filepath.Clean(r)
+		if r == "." || seen[r] {
+			continue
+		}
+		seen[r] = true
+		out = append(out, r)
+	}
+	sort.Strings(out)
+	return out
+}
 
 // Provider is one source of 3D assets.
 type Provider interface {
@@ -41,14 +106,16 @@ type Provider interface {
 	RegisterRoutes(mux *http.ServeMux, vapi string)
 }
 
-// Registry is the set of active providers.
+// Registry is the set of active providers, plus the shared asset index used
+// by the unified /providers/search endpoint (nil in degraded mode).
 type Registry struct {
 	providers []Provider
+	idx       *index.Store
 }
 
-// NewRegistry returns a Registry holding the given providers.
-func NewRegistry(ps ...Provider) *Registry {
-	return &Registry{providers: ps}
+// NewRegistry returns a Registry holding the shared index and providers.
+func NewRegistry(idx *index.Store, ps ...Provider) *Registry {
+	return &Registry{providers: ps, idx: idx}
 }
 
 // All returns the registered providers in registration order.
@@ -72,10 +139,30 @@ func (r *Registry) RegisterRoutes(mux *http.ServeMux, vapi string) {
 	}
 	mux.HandleFunc("/providers/list", list)
 	mux.HandleFunc("/"+vapi+"/providers/list", list)
+	mux.HandleFunc("/providers/search", r.search)
+	mux.HandleFunc("/"+vapi+"/providers/search", r.search)
 
 	for _, p := range r.providers {
 		p.RegisterRoutes(mux, vapi)
 	}
+}
+
+// search is the unified index query: /providers/search?q=<text>[&provider=<name>][&limit=<n>].
+// With no index it reports index_available instead of failing.
+func (r *Registry) search(w http.ResponseWriter, req *http.Request) {
+	if r.idx == nil {
+		WriteJSON(w, map[string]any{"results": []any{}, "index_available": false})
+		return
+	}
+	q := req.URL.Query().Get("q")
+	provider := req.URL.Query().Get("provider")
+	limit, _ := strconv.Atoi(req.URL.Query().Get("limit"))
+	assets, err := r.idx.Search(req.Context(), provider, q, limit)
+	if err != nil {
+		http.Error(w, "search failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	WriteJSON(w, map[string]any{"results": assets, "index_available": true})
 }
 
 // WriteJSON is the shared response helper for provider endpoints.
