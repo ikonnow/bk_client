@@ -516,6 +516,9 @@ func main() {
 	mux.HandleFunc("/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 	mux.HandleFunc("/"+vapi+"/godot/unsubscribe_addon", godotUnsubscribeAddonHandler)
 
+	// ASSETS2GODOT - additive provider endpoints under /providers/...
+	initProviders(mux, vapi)
+
 	// Show a system tray icon for standalone Clients and for add-on-spawned ones -
 	// so the running Client is always visible and quittable.
 	// The HTTP server runs in a background goroutine and the tray loop owns the main goroutine.
