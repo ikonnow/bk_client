@@ -21,10 +21,10 @@
 // Bridge's Megascans Library. See docs/research/epic_vault_paths.md in the
 // plugin repository for the candidate paths per OS.
 //
-// Scanned roots come from the settings variable vault_roots; while that
-// variable is unset the provider scans the auto-detected caches that exist —
-// dirs the user's launcher/Bridge already pointed at. Once the user edits
-// the list (even to empty), the configured list is authoritative.
+// Scanned roots come from the settings variable vault_roots. Auto-detected
+// caches are exposed as candidate_roots for display/adoption only — nothing
+// is walked until the user explicitly configures roots (POST /roots), even
+// when that means the empty list.
 package fab_vault
 
 import (
@@ -43,7 +43,7 @@ const VarVaultRoots = "vault_roots"
 
 // Provider scans Epic/Fab/Quixel vault caches.
 type Provider struct {
-	idx *index.Store      // nil when the index is unavailable — provider still serves
+	idx *index.Store     // nil when the index is unavailable — provider still serves
 	cfg providers.Config // nil when the settings store is unavailable
 }
 
@@ -93,24 +93,12 @@ func Candidates() []string {
 	}
 }
 
-// detected returns the auto-detected candidates that currently exist.
-func detected() []string {
-	var out []string
-	for _, r := range providers.ProbeRoots(Candidates()) {
-		if r.Exists {
-			out = append(out, r.Path)
-		}
-	}
-	return out
-}
-
 // rootsList resolves the effective roots and where they came from.
+// Detected caches stay suggestions only — the provider scans nothing until
+// the user stores a roots list.
 func (p *Provider) rootsList() ([]string, string) {
 	if roots, ok := providers.RootsFromVar(p.cfg, VarVaultRoots); ok {
 		return roots, "configured"
-	}
-	if det := detected(); len(det) > 0 {
-		return det, "detected"
 	}
 	return nil, "none"
 }
@@ -118,25 +106,30 @@ func (p *Provider) rootsList() ([]string, string) {
 func (p *Provider) status(w http.ResponseWriter, _ *http.Request) {
 	roots, source := p.rootsList()
 	providers.WriteJSON(w, map[string]any{
-		"provider":         p.Name(),
-		"kind":             p.Kind(),
-		"index_available":  p.idx != nil,
-		"roots":            providers.ProbeRoots(roots),
-		"roots_source":     source,
-		"candidate_roots":  providers.ProbeRoots(Candidates()),
+		"provider":        p.Name(),
+		"kind":            p.Kind(),
+		"index_available": p.idx != nil,
+		"roots":           providers.ProbeRoots(roots),
+		"roots_source":    source,
+		"candidate_roots": providers.ProbeRoots(Candidates()),
 	})
 }
 
-// scan walks the effective roots and indexes the asset files found.
+// scan walks the effective roots and indexes the asset files found. With
+// no configured roots it walks nothing — detected caches are not touched.
 func (p *Provider) scan(w http.ResponseWriter, r *http.Request) {
 	roots, source := p.rootsList()
 	sum := providers.ScanRoots(r.Context(), p.idx, p.Name(), roots)
-	providers.WriteJSON(w, map[string]any{
+	resp := map[string]any{
 		"provider":        p.Name(),
 		"roots_source":    source,
 		"scanned":         sum,
 		"index_available": p.idx != nil,
-	})
+	}
+	if source == "none" {
+		resp["hint"] = "no roots configured; adopt candidate_roots via POST roots"
+	}
+	providers.WriteJSON(w, resp)
 }
 
 // roots handles GET (effective roots + detected candidates) and POST
@@ -146,9 +139,9 @@ func (p *Provider) roots(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		roots, source := p.rootsList()
 		providers.WriteJSON(w, map[string]any{
-			"roots":            providers.ProbeRoots(roots),
-			"source":           source,
-			"candidate_roots":  providers.ProbeRoots(Candidates()),
+			"roots":           providers.ProbeRoots(roots),
+			"source":          source,
+			"candidate_roots": providers.ProbeRoots(Candidates()),
 		})
 	case http.MethodPost:
 		if p.cfg == nil {
