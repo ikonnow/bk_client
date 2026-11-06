@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/blenderkit/blenderkit/client/internal/index"
 	"github.com/blenderkit/blenderkit/client/internal/settings"
@@ -80,6 +81,10 @@ func NormalizeRoots(roots []string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(roots))
 	for _, r := range roots {
+		r = strings.TrimSpace(r)
+		if r == "" {
+			continue // "" would otherwise resolve to the working directory
+		}
 		if abs, err := filepath.Abs(r); err == nil {
 			r = abs
 		}
