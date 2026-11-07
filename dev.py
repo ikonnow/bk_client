@@ -575,7 +575,10 @@ def release(args: argparse.Namespace) -> None:
     print("Prebuilt binaries copied.")
 
     # VALIDATE BINARIES
-    verify(out_dir)
+    if args.no_verify:
+        print(">>> --no-verify: skipping signature/notarization checks (unsigned build).")
+    else:
+        verify(out_dir)
 
     # PACKAGE BINARIES
     print(f"Blendkit-Client v{version} builds ready in {out_dir}.")
@@ -854,6 +857,11 @@ def main():
     p_release = sub.add_parser("release", help="Make release from prebuilt binaries.")
     p_release.add_argument("--prebuilt-bin-dir", required=True, help="Directory containing prebuilt binaries.")
     p_release.add_argument("--out", default="out", help="Output directory (default: ./out).")
+    p_release.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="Skip code-signing/notarization verification (for unsigned fork builds).",
+    )
     p_release.set_defaults(func=release)
 
     sub.add_parser("test", help="Run Go unit tests and lint Python recipes.").set_defaults(func=test)
