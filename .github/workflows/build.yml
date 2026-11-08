@@ -204,47 +204,10 @@ jobs:
           path: client/out/bk_client-windows-x86_64.exe
           archive: false
 
-  # Windows 7/8/8.1 (pre-Windows-10) build. Go >= 1.21 dropped support for these
-  # OSes, so we cross-compile with the last compatible toolchain (go1.20) and a
-  # pinned set of older dependencies. Produces a separate, distinctly named
-  # binary shipped alongside the modern one; the add-on picks it automatically on
-  # pre-Windows-10 machines.
-  build_windows7_x86_64:
-    runs-on: ubuntu-24.04
-    needs: get_version
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up Go 1.20 (last version supporting Windows 7/8)
-        uses: actions/setup-go@v7
-        with:
-          go-version: '1.20.14'
-        id: go
-      - name: Pin module + dependencies for Go 1.20
-        # Newer module directives and dependencies are not understood by Go 1.20.
-        # Keep this legacy build on the last dependency versions that support it.
-        working-directory: ./client
-        run: |
-          sed -i 's/^go .*/go 1.20/' go.mod
-          grep -q '^go 1.20$' go.mod
-          go get \
-            github.com/gofrs/flock@v0.8.1 \
-            github.com/xo/terminfo@v0.0.0-20220910002029-abceb7e1c41e \
-            github.com/rapid7/go-get-proxied@v0.0.0-20250207205329-09112877ac70 \
-            github.com/gookit/color@v1.5.4 \
-            golang.org/x/sys@v0.30.0
-          go mod tidy
-      - name: Build Blendkit_Client (Windows 7 x86_64)
-        working-directory: ./client
-        env:
-          CGO_ENABLED: '1'
-          GOOS: windows
-          GOARCH: amd64
-        run: go build -o out/bk_client-windows7-x86_64.exe -trimpath -ldflags "-X main.ClientVersion=${{ needs.get_version.outputs.version }} -s"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: bk_client-windows7-x86_64.exe
-          path: client/out/bk_client-windows7-x86_64.exe
-          archive: false
+  # Windows 7/8/8.1 (pre-Windows-10) dropped: upstream's legacy build needs
+  # an ever-growing Go 1.20 dep-pin list (every bump can break it — last seen
+  # with go-humanize v1.1.0) and Assets2Godot never ships that binary anyway
+  # (dev.py fetches only the six modern builds below).
 
 # MARK: CODE SIGN
   code_sign_macos:
@@ -362,7 +325,7 @@ jobs:
     runs-on: ubuntu-latest
     if: vars.SIGNING_ENABLED == 'true'
     environment: signing
-    needs: [build_windows_arm, build_windows_x86_64, build_windows7_x86_64]
+    needs: [build_windows_arm, build_windows_x86_64]
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -390,14 +353,6 @@ jobs:
         with:
           name: bk_client-windows-arm64.exe
           path: out/bk_client-windows-arm64.exe
-          archive: false
-          overwrite: true
-
-      - name: Upload signed Windows 7 x86_64 artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: bk_client-windows7-x86_64.exe
-          path: out/bk_client-windows7-x86_64.exe
           archive: false
           overwrite: true
 
